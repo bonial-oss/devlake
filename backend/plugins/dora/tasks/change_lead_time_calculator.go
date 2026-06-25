@@ -323,8 +323,13 @@ func batchFetchDeployments(projectName string, db dal.Dal) (map[string]*devops.C
 		&results,
 		dal.Select("dc.*, cd.commit_sha as merge_sha"),
 		dal.From("cicd_deployment_commits dc"),
-		dal.Join("LEFT JOIN cicd_deployment_commits p ON dc.prev_success_deployment_commit_id = p.id"),
-		dal.Join("INNER JOIN commits_diffs cd ON cd.new_commit_sha = dc.commit_sha AND cd.old_commit_sha = COALESCE(p.commit_sha, '')"),
+		// Match the merge commit to ANY commits_diffs row whose new_commit_sha is this deployment's
+		// commit, regardless of which baseline the diff range was computed against. The previous strict
+		// "AND cd.old_commit_sha = COALESCE(p.commit_sha, '')" dropped PRs whenever the range was computed
+		// against a different baseline (e.g. a commit deployed by both an aborted/failed run and a later
+		// successful one, or where a missing commit broke refdiff's graph walk), even though the commit
+		// clearly shipped in this successful production deployment.
+		dal.Join("INNER JOIN commits_diffs cd ON cd.new_commit_sha = dc.commit_sha"),
 		dal.Join("LEFT JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id"),
 		dal.Where("dc.prev_success_deployment_commit_id <> ''"),
 		dal.Where("dc.environment = 'PRODUCTION'"), // TODO: remove this when multi-environment is supported
