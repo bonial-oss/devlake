@@ -136,11 +136,11 @@ func makeDataSourcePipelinePlanV200(
 					"connectionId":          githubRepo.ConnectionId,
 					"pluginName":            "github",
 					"excludeFileExtensions": scopeConfig.PrSizeExcludedFileExtensions,
-					// Force a full clone (mirrors the azuredevops blueprint). Default shallow incremental
-					// clones (--depth=1 --shallow-since) drop commits at the boundary, leaving merge commits
-					// absent from the `commits` table. That breaks refdiff's commit-graph walk and the
-					// PR->deployment linkage used by the DORA metrics.
-					"noShallowClone": true,
+					// Collect the full commit history (not a shallow --shallow-since clone).
+					// Shallow clones drop commits at the boundary and omit history older than
+					// the incremental window, leaving merge commits absent from `commits`,
+					// which breaks refdiff's commit graph and the DORA PR->deployment linkage.
+					"fullClone": true,
 				},
 			})
 
