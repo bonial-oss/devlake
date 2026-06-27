@@ -39,9 +39,13 @@ replicaCount: 1            # the lake runs pipelines; keep a single instance
 podDisruptionBudget:
   enabled: false           # single replica
 
+# The monochart sets these as requests; limits = request * 1.25. The lake runs
+# collection pipelines: full-clone gitextractor on large repos and the dora
+# commit-ancestry walk (loads commit_parents into memory) are memory-heavy, and
+# 512Mi (640Mi limit) OOM-killed the pod mid-clone. Give it real headroom.
 resources:
-  cpu: 200m
-  memory: 512Mi
+  cpu: "1"
+  memory: 4Gi
 
 service:
   enabled: true
