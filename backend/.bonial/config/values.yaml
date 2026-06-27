@@ -20,6 +20,14 @@ deployment:
             port: default
           initialDelaySeconds: 10
           periodSeconds: 10
+        # startupProbe gives the first boot up to ~5 min (migrations / init)
+        # before liveness can kill it — avoids killing the pod mid-startup.
+        startupProbe:
+          httpGet:
+            path: /ping
+            port: default
+          periodSeconds: 10
+          failureThreshold: 30
 
 replicaCount: 1            # the lake runs pipelines; keep a single instance
 podDisruptionBudget:
@@ -52,6 +60,11 @@ configMaps:
       LOGGING_DIR: /app/logs
       ENABLE_BOT_FILTERING: "true"
       BOT_FILTERING_PATTERN: '.*(\[bot\]|-bot).*'
+      # Do NOT resume pipelines from the production snapshot on boot. The
+      # snapshot has many TASK_RUNNING rows; the startup
+      # `UPDATE _devlake_tasks SET status='TASK_RESUME' WHERE status='TASK_RUNNING'`
+      # hit a lock-wait timeout (Error 1205) and crash-looped the pod.
+      RESUME_PIPELINES: "false"
 
 # DB_URL (contains the password) and ENCRYPTION_SECRET come from the SOPS-
 # encrypted stage/secrets.yaml.
