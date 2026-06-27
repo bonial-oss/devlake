@@ -1,6 +1,8 @@
 # DevLake config-ui — monochart values (component `devlake-ui`, workDir=config-ui).
-# This is the human entrypoint. nginx (config-ui/nginx.conf) proxies /api/ to the
-# lake and /grafana/ to grafana over https through the internal gateway.
+# This is the human entrypoint. The gateway path-routes /grafana to grafana and
+# /api + / to config-ui (see httproute rules); config-ui's nginx then proxies
+# /api to the lake. (We do NOT proxy /grafana through nginx — its Host-header
+# rewrite loops against the gateway's host-based routing.)
 
 deployment:
   enabled: true
@@ -36,20 +38,44 @@ service:
       containerPort: 4000
       servicePort: 4000
 
-# Internal-only HTTPRoute (default gateway `internal`, no OIDC). Host is
-# auto-computed: {account}-{uuid}-devlake-ui.{domain}.
+# Single-host gateway routing (modeled on the Terraform deploy): everything is
+# on the devlake-ui host ({account}-{uuid}-devlake-ui.{domain}); the gateway
+# path-routes /grafana straight to grafana (NOT through config-ui's nginx proxy,
+# which would loop on the Host header), and /api + / to config-ui. Internal
+# gateway, no OIDC.
 httproute:
   default:
     enabled: true
+    rules:
+      - matches:
+          - path:
+              type: PathPrefix
+              value: /grafana
+        backendRefs:
+          - name: devlake-grafana
+            port: 3000
+      - matches:
+          - path:
+              type: PathPrefix
+              value: /api
+        backendRefs:
+          - name: devlake-ui
+            port: 4000
+      - matches:
+          - path:
+              type: PathPrefix
+              value: /
+        backendRefs:
+          - name: devlake-ui
+            port: 4000
 
 configMaps:
   default:
     enabled: true
     env:
-      # Cross-component refs resolve via each service's own internal HTTPRoute on
-      # the per-stage subdomain (https/443 via the gateway) — uuid is dynamic via
-      # stageConfig. nginx proxies over https (PROTO=https).
+      # config-ui proxies /api to the lake via its per-stage subdomain (uuid
+      # dynamic via stageConfig); this path does NOT loop because the /api nginx
+      # block doesn't override the Host header. /grafana is handled at the gateway
+      # (see httproute rules above), so no GRAFANA_ENDPOINT proxy is needed here.
       DEVLAKE_ENDPOINT: "{{.Values.stageConfig.account}}-{{.Values.stageConfig.uuid}}-devlake.{{.Values.domain}}"
       DEVLAKE_ENDPOINT_PROTO: https
-      GRAFANA_ENDPOINT: "{{.Values.stageConfig.account}}-{{.Values.stageConfig.uuid}}-devlake-grafana.{{.Values.domain}}"
-      GRAFANA_ENDPOINT_PROTO: https
