@@ -1,0 +1,60 @@
+# DevLake lake/backend — monochart values (deployed via aws-stage-configuration
+# component `devlake`, template spinnaker/k8s, workDir=backend).
+# Image is built from this dir's Dockerfile and injected by Spinnaker as
+# images.default. Stateless Deployment; exposed only on the internal gateway.
+
+deployment:
+  enabled: true
+  pod:
+    containers:
+      default:
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: default
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: default
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+replicaCount: 1            # the lake runs pipelines; keep a single instance
+podDisruptionBudget:
+  enabled: false           # single replica
+
+resources:
+  cpu: 200m
+  memory: 512Mi
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    default:
+      containerPort: 8080
+      servicePort: 8080
+
+# Internal-only HTTPRoute (default gateway is `internal`, no OIDC). Required so
+# config-ui can reach the lake at https://{account}-{uuid}-devlake.{domain}/.
+httproute:
+  default:
+    enabled: true
+
+configMaps:
+  default:
+    enabled: true
+    env:
+      PORT: "8080"
+      MODE: release
+      LOGGING_DIR: /app/logs
+      ENABLE_BOT_FILTERING: "true"
+      BOT_FILTERING_PATTERN: '.*(\[bot\]|-bot).*'
+
+# DB_URL (contains the password) and ENCRYPTION_SECRET come from the SOPS-
+# encrypted stage/secrets.yaml.
+secrets:
+  default:
+    enabled: true

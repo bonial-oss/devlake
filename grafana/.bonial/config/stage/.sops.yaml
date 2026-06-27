@@ -1,0 +1,6 @@
+creation_rules:
+  - kms: >-
+      arn:aws:kms:eu-west-1:594234444642:alias/staff-engineers,
+      arn:aws:kms:eu-central-1:594234444642:alias/staff-engineers,
+      arn:aws:kms:eu-west-1:126368329757:alias/cicd-key,
+      arn:aws:kms:eu-central-1:126368329757:alias/cicd-key

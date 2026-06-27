@@ -1,0 +1,55 @@
+# DevLake config-ui — monochart values (component `devlake-ui`, workDir=config-ui).
+# This is the human entrypoint. nginx (config-ui/nginx.conf) proxies /api/ to the
+# lake and /grafana/ to grafana over https through the internal gateway.
+
+deployment:
+  enabled: true
+  pod:
+    containers:
+      default:
+        livenessProbe:
+          httpGet:
+            path: /
+            port: default
+          initialDelaySeconds: 15
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /
+            port: default
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+replicaCount: 1
+podDisruptionBudget:
+  enabled: false
+
+resources:
+  cpu: 100m
+  memory: 256Mi
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    default:
+      containerPort: 4000
+      servicePort: 4000
+
+# Internal-only HTTPRoute (default gateway `internal`, no OIDC). Host is
+# auto-computed: {account}-{uuid}-devlake-ui.{domain}.
+httproute:
+  default:
+    enabled: true
+
+configMaps:
+  default:
+    enabled: true
+    env:
+      # Cross-component refs resolve via each service's own internal HTTPRoute on
+      # the per-stage subdomain (https/443 via the gateway) — uuid is dynamic via
+      # stageConfig. nginx proxies over https (PROTO=https).
+      DEVLAKE_ENDPOINT: "{{.Values.stageConfig.account}}-{{.Values.stageConfig.uuid}}-devlake.{{.Values.domain}}"
+      DEVLAKE_ENDPOINT_PROTO: https
+      GRAFANA_ENDPOINT: "{{.Values.stageConfig.account}}-{{.Values.stageConfig.uuid}}-devlake-grafana.{{.Values.domain}}"
+      GRAFANA_ENDPOINT_PROTO: https
