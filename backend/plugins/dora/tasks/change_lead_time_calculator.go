@@ -209,11 +209,11 @@ func matchesBotFilter(botFilterRegex *regexp.Regexp, name string) bool {
 	return botFilterRegex.MatchString(name)
 }
 
-// deploymentCommitWithMergeSha is a helper struct to capture both the deployment commit
-// and the associated merge_sha from the commits_diffs join query.
-type deploymentCommitWithMergeSha struct {
-	devops.CicdDeploymentCommit
-	MergeSha string `gorm:"column:merge_sha"`
+// commitParentEdge is a lightweight row used to load the commit graph (child -> parent edges)
+// for commit-ancestry based deployment attribution.
+type commitParentEdge struct {
+	CommitSha       string `gorm:"column:commit_sha"`
+	ParentCommitSha string `gorm:"column:parent_commit_sha"`
 }
 
 // batchFetchFirstCommits retrieves the first commit for all pull requests in the given project.
@@ -303,53 +303,79 @@ func batchFetchFirstReviews(projectName string, db dal.Dal) (map[string]*code.Pu
 	return reviewMap, nil
 }
 
-// batchFetchDeployments retrieves deployment commits for all merge commits in the given project.
-// Returns a map indexed by merge commit SHA for O(1) lookup performance.
+// batchFetchDeployments maps each commit to the EARLIEST successful production deployment
+// whose commit descends from it — i.e. the deployment that first shipped that commit.
+// Returns a map indexed by commit SHA for O(1) lookup; the caller looks up a PR by its
+// merge_commit_sha.
 //
-// The query finds the first successful production deployment for each merge commit by:
-// 1. Finding deployment commits that have a previous successful deployment
-// 2. Joining with commits_diffs to find which deployment included each merge commit
-// 3. Filtering for successful production deployments
-// 4. Ordering by started_date to get the earliest deployment
+// This uses the commit-ancestry definition of "deployed": a commit is shipped by the first
+// successful production deployment that has it as an ancestor in the git graph. It is computed
+// by walking commit_parents from each deployment commit, processing deployments oldest-first
+// and attributing every newly-reached (unclaimed) commit to that deployment. Pruning the walk
+// at already-claimed commits keeps the whole pass O(commits + edges): once a commit is claimed
+// by an earlier deployment, all of its ancestors were claimed in that same walk too.
 //
-// The map is indexed by merge_sha (from commits_diffs), not by deployment commit_sha,
-// because the caller needs to look up deployments by PR merge_commit_sha.
+// Why not a commits_diffs join: refdiff's incremental diff (old = prev_success) misses commits
+// that reach production via a merge commit or after a superseded Stop/FAILURE deployment
+// (under-linking), while matching any commits_diffs row absorbs the rooted old_commit_sha=''
+// diffs that Stop/FAILURE deployments generate and collapses whole histories onto one
+// deployment (over-linking). Walking the real commit graph avoids both.
+//
+// Note: requires a complete commit graph. Where gitextractor shallow-cloned (missing commits),
+// the walk stops early; the full-clone collection must run first. Also, the first deployment we
+// have recorded for a repo claims its entire prior history, so PRs merged before deployment
+// tracking began (or across a tracking gap, e.g. a repo migration) can attach to a later
+// deployment with an inflated lead time — handle those via scope/guardrails, not here.
 func batchFetchDeployments(projectName string, db dal.Dal) (map[string]*devops.CicdDeploymentCommit, errors.Error) {
-	var results []*deploymentCommitWithMergeSha
-
-	// Query finds the first deployment for each merge commit by using a window function
-	// to rank deployments by started_date, then filtering to keep only rank 1.
+	// 1. All successful production deployments for the project, earliest first.
+	var deployments []*devops.CicdDeploymentCommit
 	err := db.All(
-		&results,
-		dal.Select("dc.*, cd.commit_sha as merge_sha"),
+		&deployments,
+		dal.Select("dc.*"),
 		dal.From("cicd_deployment_commits dc"),
-		// Match the merge commit to ANY commits_diffs row whose new_commit_sha is this deployment's
-		// commit, regardless of which baseline the diff range was computed against. The previous strict
-		// "AND cd.old_commit_sha = COALESCE(p.commit_sha, '')" dropped PRs whenever the range was computed
-		// against a different baseline (e.g. a commit deployed by both an aborted/failed run and a later
-		// successful one, or where a missing commit broke refdiff's graph walk), even though the commit
-		// clearly shipped in this successful production deployment.
-		dal.Join("INNER JOIN commits_diffs cd ON cd.new_commit_sha = dc.commit_sha"),
 		dal.Join("LEFT JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id"),
-		dal.Where("dc.prev_success_deployment_commit_id <> ''"),
 		dal.Where("dc.environment = 'PRODUCTION'"), // TODO: remove this when multi-environment is supported
 		dal.Where("dc.result = ? AND pm.project_name = ?", devops.RESULT_SUCCESS, projectName),
-		dal.Orderby("cd.commit_sha, dc.started_date ASC, dc.id ASC"),
+		dal.Orderby("dc.finished_date ASC, dc.id ASC"),
 	)
-
 	if err != nil {
-		return nil, errors.Default.Wrap(err, "failed to batch fetch deployments")
+		return nil, errors.Default.Wrap(err, "failed to fetch deployments")
 	}
 
-	// Build the map indexed by merge_sha for O(1) lookup.
-	// Keep only the first deployment for each merge commit (earliest by started_date).
-	deploymentMap := make(map[string]*devops.CicdDeploymentCommit, len(results))
-	for _, result := range results {
-		// Only keep the first deployment for each merge_sha
-		if _, exists := deploymentMap[result.MergeSha]; !exists {
-			// Copy the CicdDeploymentCommit without the MergeSha field
-			deploymentCopy := result.CicdDeploymentCommit
-			deploymentMap[result.MergeSha] = &deploymentCopy
+	// 2. The project's commit graph as child -> parents adjacency.
+	var edges []*commitParentEdge
+	err = db.All(
+		&edges,
+		dal.Select("cp.commit_sha, cp.parent_commit_sha"),
+		dal.From("commit_parents cp"),
+		dal.Join("INNER JOIN repo_commits rc ON rc.commit_sha = cp.commit_sha"),
+		dal.Join("INNER JOIN project_mapping pm ON pm.table = 'repos' AND pm.row_id = rc.repo_id"),
+		dal.Where("pm.project_name = ?", projectName),
+	)
+	if err != nil {
+		return nil, errors.Default.Wrap(err, "failed to fetch commit graph")
+	}
+	parents := make(map[string][]string, len(edges))
+	for _, e := range edges {
+		parents[e.CommitSha] = append(parents[e.CommitSha], e.ParentCommitSha)
+	}
+
+	// 3. Attribute each commit to the first deployment that reaches it (oldest deployment first).
+	deploymentMap := make(map[string]*devops.CicdDeploymentCommit)
+	for _, deployment := range deployments {
+		if deployment.CommitSha == "" {
+			continue
+		}
+		stack := []string{deployment.CommitSha}
+		for len(stack) > 0 {
+			sha := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if _, claimed := deploymentMap[sha]; claimed {
+				// Already attributed to an earlier deployment; its ancestors are too -> prune.
+				continue
+			}
+			deploymentMap[sha] = deployment
+			stack = append(stack, parents[sha]...)
 		}
 	}
 
