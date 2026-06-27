@@ -16,6 +16,12 @@ statefulset:
           requests:
             storage: 4Gi
   pod:
+    # Grafana runs as UID 472; fsGroup makes the PVC group-writable so it can
+    # write /var/lib/grafana (otherwise: "GF_PATHS_DATA is not writable").
+    securityContext:
+      runAsUser: 472
+      runAsGroup: 472
+      fsGroup: 472
     containers:
       default:
         volumeMounts:
