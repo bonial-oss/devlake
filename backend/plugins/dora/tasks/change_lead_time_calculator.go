@@ -304,7 +304,7 @@ func batchFetchFirstReviews(projectName string, db dal.Dal) (map[string]*code.Pu
 }
 
 // batchFetchDeployments maps each commit to the EARLIEST successful production deployment
-// whose commit descends from it — i.e. the deployment that first shipped that commit.
+// whose commit descends from it - i.e. the deployment that first shipped that commit.
 // Returns a map indexed by commit SHA for O(1) lookup; the caller looks up a PR by its
 // merge_commit_sha.
 //
@@ -317,7 +317,7 @@ func batchFetchFirstReviews(projectName string, db dal.Dal) (map[string]*code.Pu
 //
 // Why not a commits_diffs join: refdiff's incremental diff (old = prev_success) misses commits
 // that reach production via a merge commit or after a superseded Stop/FAILURE deployment
-// (under-linking), while matching any commits_diffs row absorbs the rooted old_commit_sha=''
+// (under-linking), while matching any commits_diffs row absorbs the rooted empty-baseline
 // diffs that Stop/FAILURE deployments generate and collapses whole histories onto one
 // deployment (over-linking). Walking the real commit graph avoids both.
 //
@@ -325,7 +325,7 @@ func batchFetchFirstReviews(projectName string, db dal.Dal) (map[string]*code.Pu
 // the walk stops early; the full-clone collection must run first. Also, the first deployment we
 // have recorded for a repo claims its entire prior history, so PRs merged before deployment
 // tracking began (or across a tracking gap, e.g. a repo migration) can attach to a later
-// deployment with an inflated lead time — handle those via scope/guardrails, not here.
+// deployment with an inflated lead time - handle those via scope/guardrails, not here.
 func batchFetchDeployments(projectName string, db dal.Dal) (map[string]*devops.CicdDeploymentCommit, errors.Error) {
 	// 1. All successful production deployments for the project, earliest first.
 	var deployments []*devops.CicdDeploymentCommit
