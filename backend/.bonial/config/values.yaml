@@ -5,6 +5,12 @@
 
 deployment:
   enabled: true
+  # DevLake is single-instance and holds a DB lock (_devlake_locking_stub); a
+  # rolling update surges a second pod that can't acquire the lock and crash-loops
+  # (locking timeout), stalling the rollout. Recreate terminates the old pod before
+  # starting the new one so the lock is free.
+  strategy:
+    type: Recreate
   pod:
     containers:
       default:
