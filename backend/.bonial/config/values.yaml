@@ -44,7 +44,7 @@ podDisruptionBudget:
 # commit-ancestry walk (loads commit_parents into memory) are memory-heavy, and
 # 512Mi (640Mi limit) OOM-killed the pod mid-clone. Give it real headroom.
 resources:
-  cpu: "1"
+  cpu: "2"
   memory: 4Gi
 
 service:
@@ -70,6 +70,10 @@ configMaps:
       LOGGING_DIR: /app/logs
       ENABLE_BOT_FILTERING: "true"
       BOT_FILTERING_PATTERN: '.*(\[bot\]|-bot).*'
+      # Cap concurrent pipelines. Unset/0 means "no limit" (10000) in DevLake, so
+      # triggering many blueprints at once stampedes this single pod (CPU spiked to
+      # ~6.5 cores). 5 bounds the load; raise once headroom is confirmed.
+      PIPELINE_MAX_PARALLEL: "5"
       # Do NOT resume pipelines from the production snapshot on boot. The
       # snapshot has many TASK_RUNNING rows; the startup
       # `UPDATE _devlake_tasks SET status='TASK_RESUME' WHERE status='TASK_RUNNING'`
