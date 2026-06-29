@@ -263,6 +263,16 @@ func (r *Libgit2RepoCollector) CollectCommits(subtaskCtx plugin.SubTaskContext) 
 	for _, component := range components {
 		componentMap[component.Name] = regexp.MustCompile(component.PathRegex)
 	}
+	// Incremental collection: commits already stored for this repo were fully
+	// extracted by a previous run (git commits are immutable), so skip them and
+	// only walk newly fetched commits.
+	collected, err := loadCollectedCommitShas(db, r.id)
+	if err != nil {
+		return err
+	}
+	if len(collected) > 0 {
+		r.logger.Info("incremental commit collection: skipping %d already-collected commits for repo %s", len(collected), r.id)
+	}
 	odb, err := errors.Convert01(r.repo.Odb())
 	if err != nil {
 		return err
@@ -272,6 +282,10 @@ func (r *Libgit2RepoCollector) CollectCommits(subtaskCtx plugin.SubTaskContext) 
 		case <-subtaskCtx.GetContext().Done():
 			return subtaskCtx.GetContext().Err()
 		default:
+		}
+		if _, ok := collected[id.String()]; ok {
+			// already extracted in a previous run; skip the expensive lookup+stat
+			return nil
 		}
 		commit, err1 := r.repo.LookupCommit(id)
 		if err1 != nil && err1.Error() != TypeNotMatchError {

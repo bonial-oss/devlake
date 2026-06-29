@@ -287,6 +287,17 @@ func (r *GogitRepoCollector) CollectCommits(subtaskCtx plugin.SubTaskContext) (e
 	repo := r.repo
 	store := r.store
 
+	// Incremental collection: commits already stored for this repo were fully
+	// extracted by a previous run (git commits are immutable), so skip them and
+	// only walk newly fetched commits.
+	collected, err := loadCollectedCommitShas(subtaskCtx.GetDal(), r.id)
+	if err != nil {
+		return err
+	}
+	if len(collected) > 0 {
+		r.logger.Info("incremental commit collection: skipping %d already-collected commits for repo %s", len(collected), r.id)
+	}
+
 	commitsObjectsIter, err := repo.CommitObjects()
 	if err != nil {
 		return err
@@ -299,6 +310,10 @@ func (r *GogitRepoCollector) CollectCommits(subtaskCtx plugin.SubTaskContext) (e
 		default:
 		}
 		commitSha := commit.Hash.String()
+		if _, ok := collected[commitSha]; ok {
+			// already extracted in a previous run; skip the expensive stat diff
+			return nil
+		}
 
 		if commit.NumParents() != 0 {
 			_, err := commit.Parents().Next()
