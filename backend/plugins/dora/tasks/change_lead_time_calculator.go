@@ -361,6 +361,22 @@ func batchFetchDeployments(projectName string, db dal.Dal) (map[string]*devops.C
 	}
 
 	// 3. Attribute each commit to the first deployment that reaches it (oldest deployment first).
+	return attributeCommitsToDeployments(deployments, parents), nil
+}
+
+// attributeCommitsToDeployments maps every commit in the graph to the deployment that
+// first shipped it: the earliest successful production deployment that has the commit as
+// an ancestor. deployments must be ordered oldest-first; parents is the commit graph as a
+// child -> parents adjacency list.
+//
+// For each deployment (oldest first) it walks the deployment commit's ancestry, claiming
+// every commit not yet owned by an earlier deployment. Reaching an already-claimed commit
+// prunes the walk: that commit and all of its ancestors were necessarily reached by an
+// earlier (older) deployment, so they keep their existing owner. This is O(commits + edges).
+func attributeCommitsToDeployments(
+	deployments []*devops.CicdDeploymentCommit,
+	parents map[string][]string,
+) map[string]*devops.CicdDeploymentCommit {
 	deploymentMap := make(map[string]*devops.CicdDeploymentCommit)
 	for _, deployment := range deployments {
 		if deployment.CommitSha == "" {
@@ -378,6 +394,5 @@ func batchFetchDeployments(projectName string, db dal.Dal) (map[string]*devops.C
 			stack = append(stack, parents[sha]...)
 		}
 	}
-
-	return deploymentMap, nil
+	return deploymentMap
 }
