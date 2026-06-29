@@ -36,12 +36,12 @@ func commitShaSet(rows []code.RepoCommit) map[string]struct{} {
 // loadCollectedCommitShas returns the set of commit SHAs already stored for the
 // given repo.
 //
-// Git commits are immutable: once a commit is present in repo_commits it has been
-// fully extracted (parents + stats) by a previous run, so re-walking it is pure
-// waste. Skipping already-collected commits makes commit collection incremental —
-// after the first full extraction only newly fetched commits are walked. This is
-// what keeps a full (non-shallow) clone affordable on large repos, where the
-// per-commit stat diff dominates the runtime.
+// Git commits don't change, so once a commit is in repo_commits it has already
+// been fully extracted (parents and stats) by an earlier run, and walking it
+// again is wasted work. Skipping the ones we already have makes collection
+// incremental: after the first full extraction, each run only walks the commits
+// it just fetched. That's what keeps a full (non-shallow) clone affordable on
+// large repos, where the per-commit stat diff is what dominates the runtime.
 func loadCollectedCommitShas(db dal.Dal, repoId string) (map[string]struct{}, errors.Error) {
 	var rows []code.RepoCommit
 	if err := db.All(&rows, dal.Select("commit_sha"), dal.From("repo_commits"), dal.Where("repo_id = ?", repoId)); err != nil {
