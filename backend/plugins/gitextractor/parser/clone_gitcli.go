@@ -172,16 +172,16 @@ func (g *GitcliCloner) CloneRepo() errors.Error {
 			return err
 		}
 	} else if g.taskData.Options.FullClone {
-		// Full history explicitly requested (e.g. by the github blueprint) to keep the
-		// commit graph complete for refdiff and the DORA PR->deployment linkage. A
-		// shallow (--depth=1 --shallow-since) clone omits history older than the
-		// incremental window and drops boundary commits whose first parent isn't in the
-		// fetched pack (see the ErrObjectNotFound skip in repo_gogit/repo_libgit2),
-		// leaving holes in the commit graph.
+		// The caller (e.g. the github blueprint) asked for the whole history. A shallow
+		// clone (--depth=1 --shallow-since) leaves out anything older than the incremental
+		// window and drops boundary commits whose first parent isn't in the fetched pack
+		// (that's the ErrObjectNotFound skip over in repo_gogit/repo_libgit2). Those gaps
+		// break refdiff's commit graph and the DORA PR->deployment linkage, so do a full
+		// clone instead.
 		//
-		// NOTE: gitextractor clones into a throwaway temp dir each run, so this re-clones
-		// full history every time. Acceptable for small/medium repos; for very large
-		// repos consider persisting the clone + incremental fetch instead.
+		// NOTE: each run clones into a fresh temp dir, so this re-clones the whole history
+		// every time. That's fine for small and medium repos. For very large ones we'd want
+		// to persist the clone and fetch incrementally instead.
 		if err := g.fullClone(); err != nil {
 			return err
 		}
