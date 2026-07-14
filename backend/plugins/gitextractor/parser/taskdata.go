@@ -45,8 +45,12 @@ type GitExtractorOptions struct {
 	SkipCommitStat        *bool  `json:"skipCommitStat" mapstructure:"skipCommitStat" comment:"skip all commit stat including added/deleted lines and commit files as well"`
 	SkipCommitFiles       *bool  `json:"skipCommitFiles" mapstructure:"skipCommitFiles"`
 	NoShallowClone        bool   `json:"noShallowClone" mapstructure:"noShallowClone"`
-	ConnectionId          uint64 `json:"connectionId" mapstructure:"connectionId,omitempty"`
-	PluginName            string `json:"pluginName" mapstructure:"pluginName,omitempty"`
+	// FullClone forces a full (non-shallow) clone so the complete commit history is
+	// collected. Required for accurate DORA metrics: shallow --shallow-since clones
+	// leave holes in the commit graph that break the PR->deployment linkage.
+	FullClone    bool   `json:"fullClone" mapstructure:"fullClone"`
+	ConnectionId uint64 `json:"connectionId" mapstructure:"connectionId,omitempty"`
+	PluginName   string `json:"pluginName" mapstructure:"pluginName,omitempty"`
 	// Configured by upstream plugin (e.g., GitLab) to exclude file extensions from commit stats
 	ExcludeFileExtensions []string `json:"excludeFileExtensions" mapstructure:"excludeFileExtensions"`
 }

@@ -43,6 +43,7 @@ type CloneRepoConfig struct {
 	SkipCommitStat  *bool
 	SkipCommitFiles *bool
 	NoShallowClone  bool
+	FullClone       bool
 }
 
 type GitcliCloner struct {
@@ -68,6 +69,7 @@ func NewGitcliCloner(ctx plugin.SubTaskContext, localDir string) (*GitcliCloner,
 			SkipCommitStat:  taskData.Options.SkipCommitStat,
 			SkipCommitFiles: taskData.Options.SkipCommitFiles,
 			NoShallowClone:  taskData.Options.NoShallowClone,
+			FullClone:       taskData.Options.FullClone,
 		},
 	}))
 
@@ -169,6 +171,21 @@ func (g *GitcliCloner) CloneRepo() errors.Error {
 		if err := g.fullClone(); err != nil {
 			return err
 		}
+	} else if g.taskData.Options.FullClone {
+		// The caller (e.g. the github blueprint) asked for the whole history. A shallow
+		// clone (--depth=1 --shallow-since) leaves out anything older than the incremental
+		// window and drops boundary commits whose first parent isn't in the fetched pack
+		// (that's the ErrObjectNotFound skip over in repo_gogit/repo_libgit2). Those gaps
+		// break refdiff's commit graph and the DORA PR->deployment linkage, so do a full
+		// clone instead.
+		//
+		// NOTE: each run clones into a fresh temp dir, so this re-clones the whole history
+		// every time. That's fine for small and medium repos. For very large ones we'd want
+		// to persist the clone and fetch incrementally instead.
+		if err := g.fullClone(); err != nil {
+			return err
+		}
+		g.success = true
 	} else {
 		if g.taskData.Options.NoShallowClone {
 			// data source does not support shallow clone
