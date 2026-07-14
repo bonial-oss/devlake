@@ -1,0 +1,741 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## AI-Assisted Code Adoption\nTracks commits whose message carries an **AI co-author trailer** (Claude Code, Cursor, GitHub Copilot, Devin, Gemini, aider). Percentages are over **human-authored** commits (bots/Renovate excluded).\n\n> ⚠️ **This is a floor, not the true number.** The trailer only appears when a developer's tooling is configured to emit it; many disable it and squash-merges can drop it. Actual AI usage is higher than shown.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "datasource",
+            "uid": "grafana"
+          },
+          "queryType": "randomWalk",
+          "refId": "A"
+        }
+      ],
+      "type": "text"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Share of human-authored commits in range that carry an AI co-author trailer.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 4
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select round(100 * sum((is_claude or is_copilot or is_cursor or is_oracle or is_devin or is_gemini or is_aider)) / nullif(count(*),0), 2) as \"AI-assisted commit %\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t",
+          "refId": "A"
+        }
+      ],
+      "title": "AI-assisted commit %",
+      "type": "stat"
+    },
+    {
+      "datasource": "mysql",
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 4
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select sum((is_claude or is_copilot or is_cursor or is_oracle or is_devin or is_gemini or is_aider)) as \"AI-assisted commits\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t",
+          "refId": "A"
+        }
+      ],
+      "title": "AI-assisted commits",
+      "type": "stat"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Distinct human authors with at least one AI-co-authored commit in range.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select count(distinct case\n    when (is_claude or is_copilot or is_cursor or is_oracle or is_devin or is_gemini or is_aider) and author_name not like '%[bot]%' and author_name <> 'nobody' then author_email\n  end) as \"Devs using AI\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t",
+          "refId": "A"
+        }
+      ],
+      "title": "Developers using AI",
+      "type": "stat"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Lines added + deleted by AI-co-authored commits.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select sum(case when (is_claude or is_copilot or is_cursor or is_oracle or is_devin or is_gemini or is_aider) then churn else 0 end) as \"AI-assisted lines (churn)\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t",
+          "refId": "A"
+        }
+      ],
+      "title": "AI-assisted lines (churn)",
+      "type": "stat"
+    },
+    {
+      "datasource": "mysql",
+      "description": "AI-assisted churn as a share of total human churn.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "purple",
+            "mode": "fixed"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select round(100 * sum(case when (is_claude or is_copilot or is_cursor or is_oracle or is_devin or is_gemini or is_aider) then churn else 0 end) / nullif(sum(churn),0), 2) as \"% of churn from AI\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t",
+          "refId": "A"
+        }
+      ],
+      "title": "% of churn from AI",
+      "type": "stat"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Adoption trend: % of human commits that are AI-co-authored, per month.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "% of human commits",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select $__timeGroup(authored_date,'1M') as time,\n  round(100 * sum((is_claude or is_copilot or is_cursor or is_oracle or is_devin or is_gemini or is_aider)) / nullif(count(*),0), 2) as \"AI-assisted %\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t\ngroup by 1\norder by 1",
+          "refId": "A"
+        }
+      ],
+      "title": "Monthly AI-assisted commit %",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Monthly AI-co-authored commits split by trailer.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "Commits",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select $__timeGroup(authored_date,'1M') as time,\n  sum(is_claude)  as \"Claude\",\n  sum(is_cursor)  as \"Cursor\",\n  sum(is_copilot) as \"Copilot\",\n  sum(is_oracle)  as \"Oracle Agent\",\n  sum(is_devin)   as \"Devin\",\n  sum(is_gemini)  as \"Gemini\",\n  sum(is_aider)   as \"Aider\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t\ngroup by 1\norder by 1",
+          "refId": "A"
+        }
+      ],
+      "title": "AI-assisted commits by tool",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Distribution of AI-co-authored commits by tool over the selected range.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 9,
+      "options": {
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select\n  sum(is_claude)  as \"Claude\",\n  sum(is_cursor)  as \"Cursor\",\n  sum(is_copilot) as \"Copilot\",\n  sum(is_oracle)  as \"Oracle Agent\",\n  sum(is_devin)   as \"Devin\",\n  sum(is_gemini)  as \"Gemini\",\n  sum(is_aider)   as \"Aider\"\nfrom (\n  select distinct\n    c.sha, c.authored_date, c.additions + c.deletions as churn, c.author_email, c.author_name,\n    (c.msg like '%noreply@anthropic.com%')                                        as is_claude,\n    (c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%')  as is_copilot,\n    (c.msg like '%Co-authored-by: Cursor%')                                       as is_cursor,\n    (c.msg like '%oracle-agent@bonial.com%')                                      as is_oracle,\n    (c.msg like '%Co-authored-by: Devin%')                                        as is_devin,\n    (c.msg like '%Co-authored-by: Gemini%')                                       as is_gemini,\n    (c.msg like '%Co-authored-by: aider%')                                        as is_aider\n  from (\n    select sha, authored_date, additions, deletions, author_email, author_name,\n           convert(message using utf8mb4) as msg\n    from commits\n  ) c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    -- Denominator = engineering commits (humans + AI agents), excluding mechanical bots.\n    -- AI-trailer commits are always kept, even when authored by an agent (e.g. 'nobody', copilot-swe-agent[bot]).\n    and (\n      (c.msg like '%noreply@anthropic.com%'\n       or c.msg like '%Co-authored-by: Copilot%' or c.msg like '%copilot-swe-agent%'\n       or c.msg like '%Co-authored-by: Cursor%'\n       or c.msg like '%oracle-agent@bonial.com%'\n       or c.msg like '%Co-authored-by: Devin%'\n       or c.msg like '%Co-authored-by: Gemini%'\n       or c.msg like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t",
+          "refId": "A"
+        }
+      ],
+      "title": "Trailer share",
+      "type": "piechart"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Per-project AI-co-authored commit counts, adoption %, and churn.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "AI %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              {
+                "id": "max",
+                "value": 30
+              },
+              {
+                "id": "min",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "id": 10,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "enablePagination": true,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "AI commits",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "11.2.0",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "select\n  t.project_name                                              as \"Project\",\n  count(*)                                                    as \"Human commits\",\n  sum(t.is_ai)                                                as \"AI commits\",\n  round(100 * sum(t.is_ai) / nullif(count(*),0), 2)           as \"AI %\",\n  sum(case when t.is_ai then t.churn else 0 end)              as \"AI lines (churn)\"\nfrom (\n  select distinct\n    pm.project_name,\n    c.sha,\n    c.additions + c.deletions as churn,\n    (convert(c.message using utf8mb4) like '%noreply@anthropic.com%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Copilot%' or convert(c.message using utf8mb4) like '%copilot-swe-agent%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Cursor%'\n       or convert(c.message using utf8mb4) like '%oracle-agent@bonial.com%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Devin%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Gemini%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: aider%') as is_ai\n  from commits c\n  join repo_commits rc on rc.commit_sha = c.sha\n  join project_mapping pm on pm.row_id = rc.repo_id and pm.`table` = 'repos'\n  where pm.project_name in (${project})\n    and $__timeFilter(c.authored_date)\n    and (\n      (convert(c.message using utf8mb4) like '%noreply@anthropic.com%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Copilot%' or convert(c.message using utf8mb4) like '%copilot-swe-agent%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Cursor%'\n       or convert(c.message using utf8mb4) like '%oracle-agent@bonial.com%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Devin%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: Gemini%'\n       or convert(c.message using utf8mb4) like '%Co-authored-by: aider%')\n      or (\n        c.author_name not like '%[bot]%'\n        and c.author_name not like '%renovate%'\n        and c.author_name not like '%Machine User%'\n        and c.author_name not like '%find-and-replace%'\n        and c.author_email <> 'bot@bonial.com'\n      )\n    )\n) t\ngroup by t.project_name\nhaving sum(t.is_ai) > 0\norder by sum(t.is_ai) desc",
+          "refId": "A"
+        }
+      ],
+      "title": "Adoption by project",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "AI",
+    "adoption",
+    "engineering"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": "mysql",
+        "definition": "select distinct name from projects",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Project",
+        "multi": true,
+        "name": "project",
+        "options": [],
+        "query": "select distinct name from projects",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6M",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "weekStart": "",
+  "title": "AI-Assisted Code Adoption",
+  "uid": "ai-assisted-code-adoption",
+  "version": 1
+}

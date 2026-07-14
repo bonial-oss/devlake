@@ -136,6 +136,11 @@ func makeDataSourcePipelinePlanV200(
 					"connectionId":          githubRepo.ConnectionId,
 					"pluginName":            "github",
 					"excludeFileExtensions": scopeConfig.PrSizeExcludedFileExtensions,
+					// Collect the full commit history (not a shallow --shallow-since clone).
+					// Shallow clones drop commits at the boundary and omit history older than
+					// the incremental window, leaving merge commits absent from `commits`,
+					// which breaks refdiff's commit graph and the DORA PR->deployment linkage.
+					"fullClone": true,
 				},
 			})
 
