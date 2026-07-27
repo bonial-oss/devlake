@@ -30,8 +30,18 @@ type GithubAccountEdge struct {
 	AvatarUrl string
 	HtmlUrl   string `graphql:"url"`
 }
+
+// GithubBotAccountEdge is the Bot-type counterpart of GithubAccountEdge; Bot has no name/company/email.
+type GithubBotAccountEdge struct {
+	Login string
+	Id    int `graphql:"databaseId"`
+}
+
+// GraphqlInlineAccountQuery selects an actor's login/id. The Bot fragment is required or GitHub App
+// actors (Renovate, Dependabot) return an empty object and lose their author identity.
 type GraphqlInlineAccountQuery struct {
 	GithubAccountEdge `graphql:"... on User"`
+	Bot               GithubBotAccountEdge `graphql:"... on Bot"`
 }
 
 func extractGraphqlPreAccount(result *[]interface{}, res *GraphqlInlineAccountQuery, repoId int, connId uint64) {
