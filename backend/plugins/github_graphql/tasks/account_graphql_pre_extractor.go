@@ -37,21 +37,41 @@ type GithubBotAccountEdge struct {
 	Id    int `graphql:"databaseId"`
 }
 
-// GraphqlInlineAccountQuery selects an actor's login/id. The Bot fragment is required or GitHub App
-// actors (Renovate, Dependabot) return an empty object and lose their author identity.
+// GraphqlInlineAccountQuery is for Actor-typed fields (author, mergedBy, review author). The Bot
+// fragment recovers login/id for GitHub App actors, which the User fragment alone returns empty.
 type GraphqlInlineAccountQuery struct {
 	GithubAccountEdge `graphql:"... on User"`
 	Bot               GithubBotAccountEdge `graphql:"... on Bot"`
 }
 
-func extractGraphqlPreAccount(result *[]interface{}, res *GraphqlInlineAccountQuery, repoId int, connId uint64) {
-	if res == nil || res.Id == 0 {
+// GraphqlInlineUserQuery is for concrete User-typed fields (assignees, commit author user), which
+// reject a Bot fragment.
+type GraphqlInlineUserQuery struct {
+	GithubAccountEdge `graphql:"... on User"`
+}
+
+func appendGraphqlPreAccount(result *[]interface{}, edge *GithubAccountEdge, repoId int, connId uint64) {
+	if edge == nil || edge.Id == 0 {
 		return
 	}
 	*result = append(*result, &models.GithubRepoAccount{
 		ConnectionId: connId,
 		RepoGithubId: repoId,
-		Login:        res.Login,
-		AccountId:    res.Id,
+		Login:        edge.Login,
+		AccountId:    edge.Id,
 	})
+}
+
+func extractGraphqlPreAccount(result *[]interface{}, res *GraphqlInlineAccountQuery, repoId int, connId uint64) {
+	if res == nil {
+		return
+	}
+	appendGraphqlPreAccount(result, &res.GithubAccountEdge, repoId, connId)
+}
+
+func extractGraphqlPreUserAccount(result *[]interface{}, res *GraphqlInlineUserQuery, repoId int, connId uint64) {
+	if res == nil {
+		return
+	}
+	appendGraphqlPreAccount(result, &res.GithubAccountEdge, repoId, connId)
 }

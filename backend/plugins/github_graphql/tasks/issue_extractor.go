@@ -83,7 +83,7 @@ func ExtractIssues(taskCtx plugin.SubTaskContext) errors.Error {
 			results = append(results, githubLabels...)
 			results = append(results, githubIssue)
 			if len(issue.AssigneeList.Assignees) > 0 {
-				extractGraphqlPreAccount(&results, &issue.AssigneeList.Assignees[0], data.Options.GithubId, data.Options.ConnectionId)
+				extractGraphqlPreUserAccount(&results, &issue.AssigneeList.Assignees[0], data.Options.GithubId, data.Options.ConnectionId)
 			}
 			extractGraphqlPreAccount(&results, issue.Author, data.Options.GithubId, data.Options.ConnectionId)
 			for _, assignee := range issue.AssigneeList.Assignees {

@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Actor selections must query the Bot type or bot-authored records lose their login/id.
-func TestPrQueryIncludesBotFragment(t *testing.T) {
+// Actor fields carry the Bot fragment; concrete User fields must not (GitHub rejects it).
+func TestPrQueryFragmentsMatchGithubTypes(t *testing.T) {
 	query, _ := graphql.ConstructQuery(&GraphqlQueryPrWrapper{}, map[string]interface{}{
 		"pageSize":   graphql.Int(10),
 		"skipCursor": (*graphql.String)(nil),
@@ -34,12 +34,14 @@ func TestPrQueryIncludesBotFragment(t *testing.T) {
 		"name":       graphql.String("n"),
 	})
 
-	// The account selection used for author, mergedBy, review author, etc.
-	assert.Contains(t, query, "... on Bot{login,databaseId}",
-		"actor selections must query the Bot type or bot-authored records lose their login/id")
-	// The author field specifically must offer both User and Bot fragments.
+	// Actor fields: both User and Bot fragments.
 	assert.Contains(t, query, "author{... on User{login,databaseId,name,company,email,avatarUrl,url},... on Bot{login,databaseId}}")
 	assert.Contains(t, query, "mergedBy{... on User{login,databaseId,name,company,email,avatarUrl,url},... on Bot{login,databaseId}}")
+
+	// Concrete User fields: User fragment only, never a Bot fragment (GitHub would reject it).
+	assert.Contains(t, query, "user{... on User{login,databaseId,name,company,email,avatarUrl,url}}")
+	assert.NotContains(t, query, "user{... on User{login,databaseId,name,company,email,avatarUrl,url},... on Bot")
+	assert.Contains(t, query, "assignees(first: 1){nodes{... on User{login,databaseId,name,company,email,avatarUrl,url}}}")
 }
 
 // A bot actor (login/id, no user-specific fields) must still reach AuthorName/AuthorId in the tool layer.
