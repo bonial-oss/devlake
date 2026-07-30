@@ -47,21 +47,21 @@ func TestPrQueryFragmentsMatchGithubTypes(t *testing.T) {
 // A bot actor (login/id, no user-specific fields) must still reach AuthorName/AuthorId in the tool layer.
 func TestBotAuthorDecodesToToolLayer(t *testing.T) {
 	raw := `{
-		"DatabaseId": 2855823583,
+		"DatabaseId": 1000001,
 		"Number": 16,
 		"State": "MERGED",
-		"Title": "chore(deps): update renovate-config-validator",
-		"Author": {"Login": "bonial-renovate-bot", "Id": 219637895},
-		"MergedBy": {"Login": "bonial-renovate-bot", "Id": 219637895}
+		"Title": "chore(deps): update dependency",
+		"Author": {"Login": "renovate-bot", "Id": 12345},
+		"MergedBy": {"Login": "renovate-bot", "Id": 12345}
 	}`
 
 	pr := &GraphqlQueryPr{}
 	assert.NoError(t, json.Unmarshal([]byte(raw), pr))
 
-	githubPr, err := convertGithubPullRequest(pr, 2, 1055517026)
+	githubPr, err := convertGithubPullRequest(pr, 1, 42)
 	assert.Nil(t, err)
-	assert.Equal(t, "bonial-renovate-bot", githubPr.AuthorName)
-	assert.Equal(t, 219637895, githubPr.AuthorId)
-	assert.Equal(t, "bonial-renovate-bot", githubPr.MergedByName)
-	assert.Equal(t, 219637895, githubPr.MergedById)
+	assert.Equal(t, "renovate-bot", githubPr.AuthorName)
+	assert.Equal(t, 12345, githubPr.AuthorId)
+	assert.Equal(t, "renovate-bot", githubPr.MergedByName)
+	assert.Equal(t, 12345, githubPr.MergedById)
 }
