@@ -145,7 +145,7 @@ func ExtractPrs(taskCtx plugin.SubTaskContext) errors.Error {
 					CommitAuthoredDate: githubCommit.AuthoredDate,
 				}
 				results = append(results, githubPullRequestCommit)
-				extractGraphqlPreAccount(&results, apiPullRequestCommit.Commit.Author.User, data.Options.GithubId, data.Options.ConnectionId)
+				extractGraphqlPreUserAccount(&results, apiPullRequestCommit.Commit.Author.User, data.Options.GithubId, data.Options.ConnectionId)
 			}
 			return results, nil
 		},

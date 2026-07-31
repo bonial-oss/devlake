@@ -75,7 +75,7 @@ type GraphqlQueryPr struct {
 	Author    *GraphqlInlineAccountQuery
 	Assignees struct {
 		// FIXME now domain layer just support one assignee
-		Assignees []GraphqlInlineAccountQuery `graphql:"nodes"`
+		Assignees []GraphqlInlineUserQuery `graphql:"nodes"`
 	} `graphql:"assignees(first: 1)"`
 	ClosedAt    *time.Time
 	MergedAt    *time.Time
@@ -145,7 +145,7 @@ type GraphqlQueryCommit struct {
 			Name  string
 			Email string
 			Date  time.Time
-			User  *GraphqlInlineAccountQuery
+			User  *GraphqlInlineUserQuery
 		}
 		Committer struct {
 			Date  time.Time
