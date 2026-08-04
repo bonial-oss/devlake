@@ -21,6 +21,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"sort"
 	"time"
 
 	"github.com/apache/incubator-devlake/core/config"
@@ -83,8 +84,17 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 	logger.Info("Fetched %d first commits in %v", len(firstCommitsMap), time.Since(startTime))
 
+	// Bot-authored comments must not count as the "first review": CI bots
+	// (e.g. github-actions) typically comment within seconds of the PR opening,
+	// which zeroes pr_pickup_time and hides the real human wait inside
+	// pr_review_time. Resolve the bot account ids once and exclude them below.
+	botAccountIds, err := loadBotAccountIds(db, botFilteringRegex)
+	if err != nil {
+		return errors.Default.Wrap(err, "failed to load bot account ids")
+	}
+
 	reviewStartTime := time.Now()
-	firstReviewsMap, err := batchFetchFirstReviews(data.Options.ProjectName, db)
+	firstReviewsMap, err := batchFetchFirstReviews(data.Options.ProjectName, db, botAccountIds)
 	if err != nil {
 		return errors.Default.Wrap(err, "failed to batch fetch first reviews")
 	}
@@ -209,6 +219,40 @@ func matchesBotFilter(botFilterRegex *regexp.Regexp, name string) bool {
 	return botFilterRegex.MatchString(name)
 }
 
+// botAccountIdSet returns the ids of the accounts whose user_name matches the bot
+// filter, as a sorted slice ready for a NOT IN clause. user_name is the login
+// (e.g. "github-actions[bot]"), the same kind of name the PR author filter
+// matches against. Kept separate from the DB access so it can be unit-tested.
+func botAccountIdSet(accounts []*crossdomain.Account, botFilterRegex *regexp.Regexp) []string {
+	if botFilterRegex == nil {
+		return nil
+	}
+	var ids []string
+	for _, account := range accounts {
+		if matchesBotFilter(botFilterRegex, account.UserName) {
+			ids = append(ids, account.Id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// loadBotAccountIds resolves which accounts are bots according to the bot filter.
+// Comments only carry an account_id, so the name matching has to happen against
+// the accounts table; the regex is applied in Go (not SQL) to keep the pattern
+// semantics identical to the PR-author bot filter and portable across databases.
+// A nil regex (bot filtering disabled) yields nil, which disables the exclusion.
+func loadBotAccountIds(db dal.Dal, botFilterRegex *regexp.Regexp) ([]string, errors.Error) {
+	if botFilterRegex == nil {
+		return nil, nil
+	}
+	var accounts []*crossdomain.Account
+	if err := db.All(&accounts, dal.Select("id, user_name"), dal.From("accounts")); err != nil {
+		return nil, err
+	}
+	return botAccountIdSet(accounts, botFilterRegex), nil
+}
+
 // commitParentEdge is a lightweight row used to load the commit graph (child -> parent edges)
 // for commit-ancestry based deployment attribution.
 type commitParentEdge struct {
@@ -262,13 +306,26 @@ func batchFetchFirstCommits(projectName string, db dal.Dal) (map[string]*code.Pu
 // batchFetchFirstReviews retrieves the first review comment for all pull requests in the given project.
 // Returns a map indexed by PR ID for O(1) lookup performance.
 //
-// The query uses a subquery to find the minimum created_date for each PR (excluding the PR author),
-// then joins back to get the full comment record.
-func batchFetchFirstReviews(projectName string, db dal.Dal) (map[string]*code.PullRequestComment, errors.Error) {
+// The query uses a subquery to find the minimum created_date for each PR (excluding the PR author
+// and any bot accounts), then joins back to get the full comment record.
+//
+// Excluding bots here matters for pr_pickup_time: CI bots comment on most PRs within
+// seconds of opening, so counting them as the "first review" collapses pickup time to
+// ~zero and shifts the entire human wait into pr_review_time.
+func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []string) (map[string]*code.PullRequestComment, errors.Error) {
 	var results []*code.PullRequestComment
 
-	// Use a subquery to find the earliest review comment for each PR (excluding author's comments),
-	// then join to get full comment details.
+	// The bot exclusion must live inside the MIN() subquery (so a bot comment can't win
+	// the minimum) and in the outer filter (so a bot comment can't ride a timestamp tie).
+	botFilterSub, botFilterOuter := "", ""
+	var subParams, outerParams []interface{}
+	if len(botAccountIds) > 0 {
+		botFilterSub = " AND prc2.account_id NOT IN (?)"
+		subParams = append(subParams, botAccountIds)
+		botFilterOuter = " AND prc.account_id NOT IN (?)"
+		outerParams = append(outerParams, botAccountIds)
+	}
+
 	err := db.All(
 		&results,
 		dal.Select("prc.*"),
@@ -277,13 +334,14 @@ func batchFetchFirstReviews(projectName string, db dal.Dal) (map[string]*code.Pu
 			SELECT prc2.pull_request_id, MIN(prc2.created_date) as min_date
 			FROM pull_request_comments prc2
 			INNER JOIN pull_requests pr2 ON pr2.id = prc2.pull_request_id
-			WHERE (pr2.author_id IS NULL OR pr2.author_id = '' OR prc2.account_id != pr2.author_id)
+			WHERE (pr2.author_id IS NULL OR pr2.author_id = '' OR prc2.account_id != pr2.author_id)`+botFilterSub+`
 			GROUP BY prc2.pull_request_id
 		) first_reviews ON prc.pull_request_id = first_reviews.pull_request_id
-		AND prc.created_date = first_reviews.min_date`),
+		AND prc.created_date = first_reviews.min_date`, subParams...),
 		dal.Join("INNER JOIN pull_requests pr ON pr.id = prc.pull_request_id"),
 		dal.Join("LEFT JOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.table = 'repos'"),
-		dal.Where("pm.project_name = ? AND (pr.author_id IS NULL OR pr.author_id = '' OR prc.account_id != pr.author_id)", projectName),
+		dal.Where("pm.project_name = ? AND (pr.author_id IS NULL OR pr.author_id = '' OR prc.account_id != pr.author_id)"+botFilterOuter,
+			append([]interface{}{projectName}, outerParams...)...),
 		dal.Orderby("prc.pull_request_id, prc.created_date ASC"),
 	)
 
