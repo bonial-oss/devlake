@@ -18,11 +18,42 @@ limitations under the License.
 package tasks
 
 import (
+	"regexp"
 	"testing"
 
+	"github.com/apache/incubator-devlake/core/models/domainlayer"
+	"github.com/apache/incubator-devlake/core/models/domainlayer/crossdomain"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
 	"github.com/stretchr/testify/assert"
 )
+
+func account(id, userName string) *crossdomain.Account {
+	return &crossdomain.Account{DomainEntity: domainlayer.DomainEntity{Id: id}, UserName: userName}
+}
+
+var botPattern = regexp.MustCompile(`.*(\[bot\]|-bot).*`)
+
+func TestBotAccountIdSet(t *testing.T) {
+	accounts := []*crossdomain.Account{
+		account("acc:1", "github-actions[bot]"),
+		account("acc:2", "jane-doe"),
+		account("acc:3", "renovate-bot"),
+		account("acc:4", "john"),
+	}
+	ids := botAccountIdSet(accounts, botPattern)
+	assert.Equal(t, []string{"acc:1", "acc:3"}, ids, "only bot-matching accounts, sorted")
+}
+
+func TestBotAccountIdSetNilRegex(t *testing.T) {
+	// Bot filtering disabled: no accounts are excluded, first-review behavior is unchanged.
+	accounts := []*crossdomain.Account{account("acc:1", "github-actions[bot]")}
+	assert.Nil(t, botAccountIdSet(accounts, nil))
+}
+
+func TestBotAccountIdSetNoMatches(t *testing.T) {
+	accounts := []*crossdomain.Account{account("acc:1", "jane-doe"), account("acc:2", "abbot")}
+	assert.Empty(t, botAccountIdSet(accounts, botPattern), "abbot has no '-bot' or '[bot]' token and must not match")
+}
 
 func deploy(id, commitSha string) *devops.CicdDeploymentCommit {
 	return &devops.CicdDeploymentCommit{CicdDeploymentId: id, CommitSha: commitSha}
