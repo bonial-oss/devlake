@@ -1,0 +1,664 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Q2/2026 baseline (fixed)",
+      "description": "Median lead time of deployed human PRs, Apr 1 to Jun 30 2026, artifact deployment excluded. The OKR reference point.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 0,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND m.pr_merged_date >= '2026-04-01' AND m.pr_merged_date < '2026-07-01'\n  GROUP BY m.id\n)\nSELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN cycle END),1) value\nFROM (SELECT cycle, PERCENT_RANK() OVER (ORDER BY cycle) rk FROM prs) t",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Median lead time (selected range)",
+      "description": "Green at or below the 19.2h target, red at or above the 21.3h baseline.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 5,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 19.2
+              },
+              {
+                "color": "red",
+                "value": 21.3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n  GROUP BY m.id\n)\nSELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN cycle END),1) value\nFROM (SELECT cycle, PERCENT_RANK() OVER (ORDER BY cycle) rk FROM prs) t",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "OKR target",
+      "description": "Baseline minus 10 percent, due end of year.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 10,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 19.2 value",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Deployed human PRs (selected range)",
+      "description": "PRs behind every number on this dashboard.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 14,
+        "y": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n  GROUP BY m.id\n) SELECT COUNT(*) value FROM prs",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "text",
+      "title": "About",
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 19,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Mirrors the DORA lead-time investigation. Stage timings come from raw review events with bots excluded. See the notes panel at the bottom before quoting numbers."
+      }
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "Stage durations at p50 / p75 / p90",
+      "description": "What a PR experiences per stage. The median PR is fast everywhere; the tails belong to deploy and coding. Stage medians do NOT sum to the median lead time.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 82,
+            "gradientMode": "none",
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ord"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n  GROUP BY m.id\n), ev AS (\n  SELECT CONCAT('github:GithubPullRequest:2:', rv.pull_request_id) pid,\n         MIN(CASE WHEN rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_rev,\n         MIN(CASE WHEN rv.state='APPROVED' AND rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_appr\n  FROM _tool_github_pull_request_reviews rv GROUP BY rv.pull_request_id\n), stages AS (\n  SELECT p.id, p.cycle, p.coding, p.deploy, p.merged,\n    CASE WHEN e.first_rev IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, pr.created_date, e.first_rev),0)/60 END pickup,\n    CASE WHEN e.first_rev IS NOT NULL AND e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_rev, e.first_appr),0)/60 END review_appr,\n    CASE WHEN e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_appr, pr.merged_date),0)/60 END merge_wait,\n    GREATEST(p.cycle - p.coding - p.deploy, 0) om\n  FROM prs p JOIN pull_requests pr ON pr.id = p.id LEFT JOIN ev e ON e.pid = p.id\n)\nSELECT ord, stage, p50, p75, p90 FROM (\nSELECT 1 ord, 'Coding' stage,\n  ROUND(MAX(CASE WHEN rk<=0.50 THEN v END),1) p50,\n  ROUND(MAX(CASE WHEN rk<=0.75 THEN v END),1) p75,\n  ROUND(MAX(CASE WHEN rk<=0.90 THEN v END),1) p90\nFROM (SELECT coding v, PERCENT_RANK() OVER (ORDER BY coding) rk FROM stages WHERE coding IS NOT NULL) t1\nUNION ALL\nSELECT 2 ord, 'Pickup' stage,\n  ROUND(MAX(CASE WHEN rk<=0.50 THEN v END),1) p50,\n  ROUND(MAX(CASE WHEN rk<=0.75 THEN v END),1) p75,\n  ROUND(MAX(CASE WHEN rk<=0.90 THEN v END),1) p90\nFROM (SELECT pickup v, PERCENT_RANK() OVER (ORDER BY pickup) rk FROM stages WHERE pickup IS NOT NULL) t2\nUNION ALL\nSELECT 3 ord, 'Review to approval' stage,\n  ROUND(MAX(CASE WHEN rk<=0.50 THEN v END),1) p50,\n  ROUND(MAX(CASE WHEN rk<=0.75 THEN v END),1) p75,\n  ROUND(MAX(CASE WHEN rk<=0.90 THEN v END),1) p90\nFROM (SELECT review_appr v, PERCENT_RANK() OVER (ORDER BY review_appr) rk FROM stages WHERE review_appr IS NOT NULL) t3\nUNION ALL\nSELECT 4 ord, 'Approval to merge' stage,\n  ROUND(MAX(CASE WHEN rk<=0.50 THEN v END),1) p50,\n  ROUND(MAX(CASE WHEN rk<=0.75 THEN v END),1) p75,\n  ROUND(MAX(CASE WHEN rk<=0.90 THEN v END),1) p90\nFROM (SELECT merge_wait v, PERCENT_RANK() OVER (ORDER BY merge_wait) rk FROM stages WHERE merge_wait IS NOT NULL) t4\nUNION ALL\nSELECT 5 ord, 'Deploy' stage,\n  ROUND(MAX(CASE WHEN rk<=0.50 THEN v END),1) p50,\n  ROUND(MAX(CASE WHEN rk<=0.75 THEN v END),1) p75,\n  ROUND(MAX(CASE WHEN rk<=0.90 THEN v END),1) p90\nFROM (SELECT deploy v, PERCENT_RANK() OVER (ORDER BY deploy) rk FROM stages WHERE deploy IS NOT NULL) t5\n) u ORDER BY ord",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "barchart",
+      "title": "Which stages matter, by lead-time band",
+      "description": "Disjoint slices of the lead-time ranking (no PR in two bands). Each stage shown as percent of the band's total hours: percentiles group the PRs, averages describe the group. Around the median, pickup dominates; in the tail, deploy and coding take over.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 82,
+            "gradientMode": "none",
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n  GROUP BY m.id\n), ev AS (\n  SELECT CONCAT('github:GithubPullRequest:2:', rv.pull_request_id) pid,\n         MIN(CASE WHEN rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_rev,\n         MIN(CASE WHEN rv.state='APPROVED' AND rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_appr\n  FROM _tool_github_pull_request_reviews rv GROUP BY rv.pull_request_id\n), stages AS (\n  SELECT p.id, p.cycle, p.coding, p.deploy, p.merged,\n    CASE WHEN e.first_rev IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, pr.created_date, e.first_rev),0)/60 END pickup,\n    CASE WHEN e.first_rev IS NOT NULL AND e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_rev, e.first_appr),0)/60 END review_appr,\n    CASE WHEN e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_appr, pr.merged_date),0)/60 END merge_wait,\n    GREATEST(p.cycle - p.coding - p.deploy, 0) om\n  FROM prs p JOIN pull_requests pr ON pr.id = p.id LEFT JOIN ev e ON e.pid = p.id\n),\nnorm AS (\n  SELECT s.*, NTILE(100) OVER (ORDER BY cycle) pct,\n    CASE WHEN pickup IS NULL THEN om ELSE pickup * om / NULLIF(pickup + COALESCE(review_appr,0) + COALESCE(merge_wait,0),0) END pk_n,\n    CASE WHEN pickup IS NULL THEN 0 ELSE COALESCE(review_appr,0) * om / NULLIF(pickup + COALESCE(review_appr,0) + COALESCE(merge_wait,0),0) END ra_n,\n    CASE WHEN pickup IS NULL THEN 0 ELSE COALESCE(merge_wait,0) * om / NULLIF(pickup + COALESCE(review_appr,0) + COALESCE(merge_wait,0),0) END am_n\n  FROM stages s WHERE cycle > 0\n)\nSELECT CASE WHEN pct BETWEEN 41 AND 60 THEN '1 p40-p60' WHEN pct BETWEEN 66 AND 85 THEN '2 p65-p85' ELSE '3 p85-p95' END band,\n  ROUND(100*SUM(coding)/SUM(cycle),0) 'Coding', ROUND(100*SUM(COALESCE(pk_n,0))/SUM(cycle),0) 'Pickup',\n  ROUND(100*SUM(COALESCE(ra_n,0))/SUM(cycle),0) 'Review to approval',\n  ROUND(100*SUM(COALESCE(am_n,0))/SUM(cycle),0) 'Approval to merge', ROUND(100*SUM(deploy)/SUM(cycle),0) 'Deploy'\nFROM norm\nWHERE pct BETWEEN 41 AND 60 OR pct BETWEEN 66 AND 85 OR pct BETWEEN 86 AND 95\nGROUP BY band ORDER BY band",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Share of PRs with first human review within...",
+      "description": "The pickup queue. The stall between 4h and 24h is the overnight wait.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n  GROUP BY m.id\n), ev AS (\n  SELECT CONCAT('github:GithubPullRequest:2:', rv.pull_request_id) pid,\n         MIN(CASE WHEN rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_rev,\n         MIN(CASE WHEN rv.state='APPROVED' AND rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_appr\n  FROM _tool_github_pull_request_reviews rv GROUP BY rv.pull_request_id\n), stages AS (\n  SELECT p.id, p.cycle, p.coding, p.deploy, p.merged,\n    CASE WHEN e.first_rev IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, pr.created_date, e.first_rev),0)/60 END pickup,\n    CASE WHEN e.first_rev IS NOT NULL AND e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_rev, e.first_appr),0)/60 END review_appr,\n    CASE WHEN e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_appr, pr.merged_date),0)/60 END merge_wait,\n    GREATEST(p.cycle - p.coding - p.deploy, 0) om\n  FROM prs p JOIN pull_requests pr ON pr.id = p.id LEFT JOIN ev e ON e.pid = p.id\n)\nSELECT ROUND(100*AVG(pickup<=1),0) 'within 1h', ROUND(100*AVG(pickup<=4),0) 'within 4h',\n       ROUND(100*AVG(pickup<=8),0) 'within 8h', ROUND(100*AVG(pickup<=24),0) 'within 24h',\n       ROUND(100*AVG(pickup<=48),0) 'within 48h', ROUND(100*AVG(pickup<=168),0) 'within 1wk'\nFROM stages WHERE pickup IS NOT NULL",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "barchart",
+      "title": "Monthly median lead time",
+      "description": "Median per merge month. Red line = 19.2h OKR target.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 82,
+            "gradientMode": "none",
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 19.2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n  GROUP BY m.id\n)\nSELECT mo 'month', MAX(CASE WHEN rk<=0.5 THEN cycle END) 'median lead time (h)'\nFROM (SELECT DATE_FORMAT(merged,'%Y-%m') mo, cycle, PERCENT_RANK() OVER (PARTITION BY DATE_FORMAT(merged,'%Y-%m') ORDER BY cycle) rk FROM prs) t\nGROUP BY mo ORDER BY mo",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "barchart",
+      "title": "Scenario medians (recomputed per PR)",
+      "description": "Median after transforming each PR's cycle. Red line = 19.2h target. Caps on outliers are not shown: they move the median by exactly zero.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 82,
+            "gradientMode": "none",
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 19.2
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ord"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": true,
+                  "tooltip": true,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_merged_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n  GROUP BY m.id\n), ev AS (\n  SELECT CONCAT('github:GithubPullRequest:2:', rv.pull_request_id) pid,\n         MIN(CASE WHEN rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_rev,\n         MIN(CASE WHEN rv.state='APPROVED' AND rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_appr\n  FROM _tool_github_pull_request_reviews rv GROUP BY rv.pull_request_id\n), stages AS (\n  SELECT p.id, p.cycle, p.coding, p.deploy, p.merged,\n    CASE WHEN e.first_rev IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, pr.created_date, e.first_rev),0)/60 END pickup,\n    CASE WHEN e.first_rev IS NOT NULL AND e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_rev, e.first_appr),0)/60 END review_appr,\n    CASE WHEN e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_appr, pr.merged_date),0)/60 END merge_wait,\n    GREATEST(p.cycle - p.coding - p.deploy, 0) om\n  FROM prs p JOIN pull_requests pr ON pr.id = p.id LEFT JOIN ev e ON e.pid = p.id\n)\nSELECT ord, scenario, median_h FROM (\nSELECT 1 ord, 'Baseline' scenario,\n  (SELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN v END),1) FROM (SELECT cycle v, PERCENT_RANK() OVER (ORDER BY cycle) rk FROM stages) t1) median_h\nUNION ALL\nSELECT 2 ord, 'Open-to-merge -20%' scenario,\n  (SELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN v END),1) FROM (SELECT GREATEST(cycle - 0.2*om, 0) v, PERCENT_RANK() OVER (ORDER BY GREATEST(cycle - 0.2*om, 0)) rk FROM stages) t2) median_h\nUNION ALL\nSELECT 3 ord, 'Deploy -50%' scenario,\n  (SELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN v END),1) FROM (SELECT GREATEST(cycle - 0.5*deploy, 0) v, PERCENT_RANK() OVER (ORDER BY GREATEST(cycle - 0.5*deploy, 0)) rk FROM stages) t3) median_h\nUNION ALL\nSELECT 4 ord, 'Coding -50%' scenario,\n  (SELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN v END),1) FROM (SELECT GREATEST(cycle - 0.5*coding, 0) v, PERCENT_RANK() OVER (ORDER BY GREATEST(cycle - 0.5*coding, 0)) rk FROM stages) t4) median_h\nUNION ALL\nSELECT 5 ord, 'Pickup -20%' scenario,\n  (SELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN v END),1) FROM (SELECT GREATEST(cycle - 0.2*COALESCE(pickup,0), 0) v, PERCENT_RANK() OVER (ORDER BY GREATEST(cycle - 0.2*COALESCE(pickup,0), 0)) rk FROM stages) t5) median_h\nUNION ALL\nSELECT 6 ord, 'Auto-merge on approval' scenario,\n  (SELECT ROUND(MAX(CASE WHEN rk<=0.5 THEN v END),1) FROM (SELECT GREATEST(cycle - COALESCE(merge_wait,0), 0) v, PERCENT_RANK() OVER (ORDER BY GREATEST(cycle - COALESCE(merge_wait,0), 0)) rk FROM stages) t6) median_h\n) u ORDER BY ord",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "By team",
+      "description": "Teams with 40+ PRs in range. Excess above company median: positive pushes the company median up. Multi-project PRs count once per project.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Excess above company median",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs_t AS (\n  SELECT m.id, REPLACE(m.project_name, ': default', '') proj, m.pr_cycle_time/60 cycle,\n         COALESCE(m.pr_coding_time,0)/60 coding, COALESCE(m.pr_deploy_time,0)/60 deploy\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.is_authored_by_bot=0 AND m.pr_cycle_time IS NOT NULL\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_merged_date)\n), ev AS (\n  SELECT CONCAT('github:GithubPullRequest:2:', rv.pull_request_id) pid,\n         MIN(CASE WHEN rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_rev,\n         MIN(CASE WHEN rv.state='APPROVED' AND rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_appr\n  FROM _tool_github_pull_request_reviews rv GROUP BY rv.pull_request_id\n),\nt AS (\n  SELECT p.proj, p.cycle, p.coding, p.deploy,\n    CASE WHEN e.first_rev IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, pr.created_date, e.first_rev),0)/60 END pickup\n  FROM prs_t p JOIN pull_requests pr ON pr.id = p.id LEFT JOIN ev e ON e.pid = p.id\n),\ncm AS (SELECT MAX(CASE WHEN rk<=0.5 THEN cycle END) v FROM (SELECT cycle, PERCENT_RANK() OVER (ORDER BY cycle) rk FROM t) x),\nmc AS (SELECT proj, MAX(CASE WHEN rk<=0.5 THEN cycle END) med FROM (SELECT proj, cycle, PERCENT_RANK() OVER (PARTITION BY proj ORDER BY cycle) rk FROM t) x GROUP BY proj),\nmp AS (SELECT proj, MAX(CASE WHEN rk<=0.5 THEN pickup END) med FROM (SELECT proj, pickup, PERCENT_RANK() OVER (PARTITION BY proj ORDER BY pickup) rk FROM t WHERE pickup IS NOT NULL) x GROUP BY proj),\nmcod AS (SELECT proj, MAX(CASE WHEN rk<=0.5 THEN coding END) med FROM (SELECT proj, coding, PERCENT_RANK() OVER (PARTITION BY proj ORDER BY coding) rk FROM t) x GROUP BY proj),\nmdep AS (SELECT proj, MAX(CASE WHEN rk<=0.5 THEN deploy END) med FROM (SELECT proj, deploy, PERCENT_RANK() OVER (PARTITION BY proj ORDER BY deploy) rk FROM t) x GROUP BY proj),\nbase AS (SELECT proj, COUNT(*) n, SUM(cycle > (SELECT v FROM cm)) above FROM t GROUP BY proj)\nSELECT b.proj 'Team', b.n 'PRs', ROUND(mc.med,1) 'Med cycle (h)', ROUND(mp.med,1) 'Med pickup (h)',\n       ROUND(mcod.med,1) 'Med coding (h)', ROUND(mdep.med,1) 'Med deploy (h)',\n       CAST(b.above - ROUND(b.n/2) AS SIGNED) 'Excess above company median'\nFROM base b\nJOIN mc ON mc.proj=b.proj LEFT JOIN mp ON mp.proj=b.proj LEFT JOIN mcod ON mcod.proj=b.proj LEFT JOIN mdep ON mdep.proj=b.proj\nWHERE b.n >= 40 ORDER BY 7 DESC",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "text",
+      "title": "Notes and definitions",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## How to read this dashboard\n\n**Scope:** deployed, human-authored PRs; median-based; the broken jenkins-agent deployment `01KTRWDKFENWZXRRF10DCEPRQ9` (aws-stage-configuration, Jun-10) is excluded everywhere. Q2/2026 baseline: 21.3h; OKR target: **19.2h** (-10%) by end of year.\n\n**Stage definitions.** Coding: first commit to PR open (inflates with branch age; rebases keep authored dates). Pickup: PR open to first *human* review (bot reviews excluded via the raw review events, so this is correct even before the `pr_pickup_time` fix ships). Review to approval: first human review to approval. Approval to merge: approval to merged. Deploy: merged to deployed in production.\n\n**Do not sum stage medians.** They are five separate middles of five separate distributions; the median PR of each stage is a different PR. Sum of stage medians is ~0.7h while the median lead time is ~21h, and both are correct. Use the band composition and the scenario panel instead; they keep each PR whole.\n\n**Teams table:** PRs in multiple projects count once per project. Excess above company median: how many more of a team's PRs sit above the company median than a 50/50 split would put there; positive pushes the company median up.\n\nFull investigation with interactive simulations: the *DORA Lead Time* Claude artifact. Companion explainer: *Why Stage Medians Don't Add Up*."
+      }
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "DORA",
+    "lead-time",
+    "engineering"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "2026-04-01T00:00:00.000Z",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "DORA - Lead Time Bottlenecks",
+  "uid": "dora-leadtime-bottlenecks",
+  "version": 1,
+  "weekStart": ""
+}
