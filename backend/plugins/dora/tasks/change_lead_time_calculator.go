@@ -84,10 +84,8 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 	logger.Info("Fetched %d first commits in %v", len(firstCommitsMap), time.Since(startTime))
 
-	// Bot-authored comments must not count as the "first review": CI bots
-	// (e.g. github-actions) typically comment within seconds of the PR opening,
-	// which zeroes pr_pickup_time and hides the real human wait inside
-	// pr_review_time. Resolve the bot account ids once and exclude them below.
+	// CI bots comment within seconds of a PR opening; counting them as the first
+	// review zeroes pr_pickup_time. Exclude their accounts from the review query.
 	botAccountIds, err := loadBotAccountIds(db, botFilteringRegex)
 	if err != nil {
 		return errors.Default.Wrap(err, "failed to load bot account ids")
@@ -219,10 +217,8 @@ func matchesBotFilter(botFilterRegex *regexp.Regexp, name string) bool {
 	return botFilterRegex.MatchString(name)
 }
 
-// botAccountIdSet returns the ids of the accounts whose user_name matches the bot
-// filter, as a sorted slice ready for a NOT IN clause. user_name is the login
-// (e.g. "github-actions[bot]"), the same kind of name the PR author filter
-// matches against. Kept separate from the DB access so it can be unit-tested.
+// botAccountIdSet returns the sorted ids of accounts whose user_name matches the
+// bot filter. Split from the DB access so it can be unit-tested.
 func botAccountIdSet(accounts []*crossdomain.Account, botFilterRegex *regexp.Regexp) []string {
 	if botFilterRegex == nil {
 		return nil
@@ -237,11 +233,9 @@ func botAccountIdSet(accounts []*crossdomain.Account, botFilterRegex *regexp.Reg
 	return ids
 }
 
-// loadBotAccountIds resolves which accounts are bots according to the bot filter.
-// Comments only carry an account_id, so the name matching has to happen against
-// the accounts table; the regex is applied in Go (not SQL) to keep the pattern
-// semantics identical to the PR-author bot filter and portable across databases.
-// A nil regex (bot filtering disabled) yields nil, which disables the exclusion.
+// loadBotAccountIds resolves bot account ids by matching account user_names
+// against the bot filter. The regex runs in Go, not SQL, so the semantics match
+// the PR-author filter and stay portable across databases. Nil regex: no exclusion.
 func loadBotAccountIds(db dal.Dal, botFilterRegex *regexp.Regexp) ([]string, errors.Error) {
 	if botFilterRegex == nil {
 		return nil, nil
@@ -308,15 +302,11 @@ func batchFetchFirstCommits(projectName string, db dal.Dal) (map[string]*code.Pu
 //
 // The query uses a subquery to find the minimum created_date for each PR (excluding the PR author
 // and any bot accounts), then joins back to get the full comment record.
-//
-// Excluding bots here matters for pr_pickup_time: CI bots comment on most PRs within
-// seconds of opening, so counting them as the "first review" collapses pickup time to
-// ~zero and shifts the entire human wait into pr_review_time.
 func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []string) (map[string]*code.PullRequestComment, errors.Error) {
 	var results []*code.PullRequestComment
 
-	// The bot exclusion must live inside the MIN() subquery (so a bot comment can't win
-	// the minimum) and in the outer filter (so a bot comment can't ride a timestamp tie).
+	// Exclude bots inside the MIN() subquery (so a bot can't win the minimum) and
+	// in the outer filter (so a bot can't ride a timestamp tie).
 	botFilterSub, botFilterOuter := "", ""
 	var subParams, outerParams []interface{}
 	if len(botAccountIds) > 0 {

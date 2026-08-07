@@ -31,14 +31,13 @@ func account(id, userName string) *crossdomain.Account {
 	return &crossdomain.Account{DomainEntity: domainlayer.DomainEntity{Id: id}, UserName: userName}
 }
 
-// The same pattern bonial runs in production for the PR-author bot filter.
 var botPattern = regexp.MustCompile(`.*(\[bot\]|-bot).*`)
 
 func TestBotAccountIdSet(t *testing.T) {
 	accounts := []*crossdomain.Account{
 		account("acc:1", "github-actions[bot]"),
 		account("acc:2", "jane-doe"),
-		account("acc:3", "bonial-renovate-bot"),
+		account("acc:3", "renovate-bot"),
 		account("acc:4", "john"),
 	}
 	ids := botAccountIdSet(accounts, botPattern)
