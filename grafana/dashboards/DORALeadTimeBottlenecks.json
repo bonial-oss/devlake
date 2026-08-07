@@ -12,7 +12,7 @@
       "id": 1,
       "type": "stat",
       "title": "Q2/2026 baseline (fixed)",
-      "description": "Median lead time of deployed human PRs, Apr 1 to Jun 30 2026, one bad deployment record excluded. Fixed OKR reference: ignores the Project and Author Type filters.",
+      "description": "Median lead time of deployed PRs (bot authors excluded), Apr 1 to Jun 30 2026, one bad deployment record excluded. Fixed OKR reference: ignores the Project and Author Type filters.",
       "datasource": "mysql",
       "gridPos": {
         "h": 5,
@@ -166,7 +166,7 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Deployed human PRs (selected range)",
+      "title": "Deployed PRs (selected range)",
       "description": "PRs behind every number on this dashboard.",
       "datasource": "mysql",
       "gridPos": {
@@ -637,7 +637,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "## How to read this dashboard\n\n**Scope:** deployed, human-authored PRs; median-based; the broken jenkins-agent deployment `01KTRWDKFENWZXRRF10DCEPRQ9` (aws-stage-configuration, Jun-10) is excluded everywhere. Q2/2026 baseline: 21.3h; OKR target: **19.2h** (-10%) by end of year.\n\n**Stage definitions.** Coding: first commit to PR open (inflates with branch age; rebases keep authored dates). Pickup: PR open to first *human* review (bot reviews excluded via the raw review events, so this is correct even before the `pr_pickup_time` fix ships). Review to approval: first human review to approval. Approval to merge: approval to merged. Deploy: merged to deployed in production.\n\n**Do not sum stage medians.** They are five separate middles of five separate distributions; the median PR of each stage is a different PR. Sum of stage medians is ~0.7h while the median lead time is ~21h, and both are correct. Use the band composition and the scenario panel instead; they keep each PR whole.\n\n**Teams table:** PRs in multiple projects count once per project. Excess above company median: how many more of a team's PRs sit above the company median than a 50/50 split would put there; positive pushes the company median up.\n\nFull investigation with interactive simulations: the *DORA Lead Time* Claude artifact. Companion explainer: *Why Stage Medians Don't Add Up*."
+        "content": "## How to read this dashboard\n\n**Scope:** deployed PRs; author scope follows the Author Type filter (default: Human); median-based; one known-bad deployment record (a months-long pipeline outage released as a single deploy) is excluded everywhere; its id is visible in the queries. Q2/2026 baseline: 21.3h; OKR target: **19.2h** (-10%) by end of year.\n\n**Stage definitions.** Coding: first commit to PR open (inflates with branch age; rebases keep authored dates). Pickup: PR open to first *human* review (bot reviews excluded via the raw review events, so this is correct even before the `pr_pickup_time` fix ships). Review to approval: first human review to approval. Approval to merge: approval to merged. Deploy: merged to deployed in production.\n\n**Do not sum stage medians.** They are five separate middles of five separate distributions; the median PR of each stage is a different PR. Sum of stage medians is ~0.7h while the median lead time is ~21h, and both are correct. Use the band composition and the scenario panel instead; they keep each PR whole.\n\n**Teams table:** PRs in multiple projects count once per project. Excess above company median: how many more of a team's PRs sit above the company median than a 50/50 split would put there; positive pushes the company median up.\n\nFull investigation with interactive simulations: the *DORA Lead Time* Claude artifact. Companion explainer: *Why Stage Medians Don't Add Up*."
       }
     }
   ],
