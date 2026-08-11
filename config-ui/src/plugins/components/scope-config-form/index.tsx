@@ -36,6 +36,8 @@ import { BambooTransformation } from '@/plugins/register/bamboo';
 import { CircleCITransformation } from '@/plugins/register/circleci';
 import { ArgoCDTransformation } from '@/plugins/register/argocd';
 import { GhCopilotTransformation } from '@/plugins/register/gh-copilot';
+import { AsanaTransformation } from '@/plugins/register/asana';
+import { ClickUpTransformation } from '@/plugins/register/clickup';
 import { DOC_URL } from '@/release';
 import { operator } from '@/utils';
 
@@ -206,6 +208,15 @@ export const ScopeConfigForm = ({
                 />
               )}
 
+              {plugin === 'clickup' && (
+                <ClickUpTransformation
+                  entities={entities}
+                  connectionId={connectionId}
+                  transformation={transformation}
+                  setTransformation={setTransformation}
+                />
+              )}
+
               {plugin === 'azuredevops' && (
                 <AzureTransformation
                   entities={entities}
@@ -290,6 +301,15 @@ export const ScopeConfigForm = ({
 
               {plugin === 'jira' && (
                 <JiraTransformation
+                  entities={entities}
+                  connectionId={connectionId}
+                  transformation={transformation}
+                  setTransformation={setTransformation}
+                />
+              )}
+
+              {plugin === 'asana' && (
+                <AsanaTransformation
                   entities={entities}
                   connectionId={connectionId}
                   transformation={transformation}

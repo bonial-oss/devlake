@@ -53,6 +53,14 @@ var CollectUserMetricsMeta = plugin.SubTaskMeta{
 	Description:      "Collect GitHub Copilot enterprise user-level usage metrics reports",
 }
 
+var CollectUserTeamsMeta = plugin.SubTaskMeta{
+	Name:             "collectUserTeams",
+	EntryPoint:       CollectUserTeams,
+	EnabledByDefault: true,
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_CROSS},
+	Description:      "Collect GitHub Copilot user-team mappings from user-teams-1-day report",
+}
+
 var ExtractOrgMetricsMeta = plugin.SubTaskMeta{
 	Name:             "extractOrgMetrics",
 	EntryPoint:       ExtractOrgMetrics,
@@ -87,4 +95,30 @@ var ExtractUserMetricsMeta = plugin.SubTaskMeta{
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_CROSS},
 	Description:      "Extract Copilot user metrics into tool-layer tables",
 	Dependencies:     []*plugin.SubTaskMeta{&CollectUserMetricsMeta},
+}
+
+var ExtractUserTeamsMeta = plugin.SubTaskMeta{
+	Name:             "extractUserTeams",
+	EntryPoint:       ExtractUserTeams,
+	EnabledByDefault: true,
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_CROSS},
+	Description:      "Extract Copilot user-team mappings into tool-layer table",
+	Dependencies:     []*plugin.SubTaskMeta{&CollectUserTeamsMeta},
+}
+
+var CollectAiCreditUsageMeta = plugin.SubTaskMeta{
+	Name:             "collectAiCreditUsage",
+	EntryPoint:       CollectAiCreditUsage,
+	EnabledByDefault: true,
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_CROSS},
+	Description:      "Collect GitHub Copilot AI credit usage billing data from billing API",
+}
+
+var ExtractAiCreditUsageMeta = plugin.SubTaskMeta{
+	Name:             "extractAiCreditUsage",
+	EntryPoint:       ExtractAiCreditUsage,
+	EnabledByDefault: true,
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_CROSS},
+	Description:      "Extract Copilot AI credit usage into tool-layer billing tables",
+	Dependencies:     []*plugin.SubTaskMeta{&CollectAiCreditUsageMeta},
 }

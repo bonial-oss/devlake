@@ -49,7 +49,7 @@ export const S3Config = ({ initialValues, values, setValues, setErrors }: Props)
     return '';
   }, [bucket]);
 
-  const bucketErrorRef = useRef<string>();
+  const bucketErrorRef = useRef<string>(undefined);
   useEffect(() => {
     if (bucketErrorRef.current !== bucketError) {
       bucketErrorRef.current = bucketError;
@@ -70,7 +70,7 @@ export const S3Config = ({ initialValues, values, setValues, setErrors }: Props)
         onChange={handleBucketChange}
         status={bucketError ? 'error' : ''}
       />
-      {bucketError && <div style={{ marginTop: 4, color: '#f5222d' }}>{bucketError}</div>}
+      {bucketError && <div style={{ marginTop: 4, color: 'var(--devlake-color-error)' }}>{bucketError}</div>}
     </Block>
   );
 };

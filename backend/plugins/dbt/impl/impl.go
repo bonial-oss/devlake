@@ -18,6 +18,8 @@ limitations under the License.
 package impl
 
 import (
+	"fmt"
+
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/plugin"
@@ -28,6 +30,7 @@ import (
 var _ interface {
 	plugin.PluginMeta
 	plugin.PluginTask
+	plugin.CloseablePluginTask
 	plugin.PluginModel
 } = (*Dbt)(nil)
 
@@ -49,13 +52,14 @@ func (p Dbt) GetTablesInfo() []dal.Tabler {
 }
 
 func (p Dbt) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]interface{}) (interface{}, errors.Error) {
+	taskCtx.GetLogger().Warn(nil, "The dbt plugin is deprecated and will be removed on August 31, 2026. Please migrate to alternative transformation approaches.")
 	var op tasks.DbtOptions
 	err := helper.Decode(options, &op, nil)
 	if err != nil {
 		return nil, err
 	}
-	if op.ProjectPath == "" {
-		return nil, errors.Default.New("projectPath is required for dbt plugin")
+	if err := tasks.PrepareOptions(&op, taskCtx.GetConfig(tasks.DbtProjectBaseDirConfigKey)); err != nil {
+		return nil, err
 	}
 
 	if op.ProjectTarget == "" {
@@ -69,6 +73,17 @@ func (p Dbt) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]inte
 
 func (p Dbt) RootPkgPath() string {
 	return "github.com/apache/incubator-devlake/plugins/dbt"
+}
+
+func (p Dbt) Close(taskCtx plugin.TaskContext) errors.Error {
+	data, ok := taskCtx.GetData().(*tasks.DbtTaskData)
+	if !ok || data == nil || data.Options == nil || !data.Options.ManagedProjectDir {
+		return nil
+	}
+	if err := tasks.CleanupManagedProjectDir(data.Options); err != nil {
+		return errors.Default.Wrap(err, fmt.Sprintf("cleanup dbt project path %q", data.Options.ProjectPath))
+	}
+	return nil
 }
 
 func (p Dbt) Name() string {

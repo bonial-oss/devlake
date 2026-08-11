@@ -41,10 +41,10 @@ export const ProjectHomePage = () => {
   const [inputValue, setInputValue] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
 
-  const nameRef = useRef(null);
-  const connectionRef = useRef(null);
-  const configRef = useRef(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const nameRef = useRef<HTMLAnchorElement>(null);
+  const connectionRef = useRef<HTMLUListElement>(null);
+  const configRef = useRef<HTMLAnchorElement | HTMLButtonElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { ready, data } = useRefreshData(
     () => API.project.list({ page, pageSize, ...(searchKeyword.trim() && { keyword: searchKeyword.trim() }) }),
@@ -150,7 +150,7 @@ export const ProjectHomePage = () => {
               <Link
                 to={PATHS.PROJECT(name)}
                 state={{ activeKey: 'configuration' }}
-                style={{ color: '#292b3f' }}
+                style={{ color: 'var(--devlake-color-text)' }}
                 ref={nameRef}
               >
                 {name}

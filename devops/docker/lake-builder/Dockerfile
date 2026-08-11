@@ -14,15 +14,17 @@
 # limitations under the License.
 #
 
-FROM --platform=linux/amd64 debian:bullseye as debian-amd64
+FROM --platform=linux/amd64 debian:bullseye AS debian-amd64
 RUN apt-get -y update && apt -y upgrade &&\
     apt-get install -y libssh2-1-dev libssl-dev zlib1g-dev
 
-FROM golang:1.20.4-bullseye as builder
+# This stage only cross-builds libgit2, it does not need a Go toolchain (and
+# `golang:<version>-bullseye` no longer exists for current Go releases).
+FROM --platform=linux/amd64 debian:bullseye AS builder
 
 # Base dependencies
 RUN apt-get -y update && apt -y upgrade &&\
-    apt-get install -y gcc binutils libfindbin-libs-perl cmake libssh2-1-dev libssl-dev zlib1g-dev \
+    apt-get install -y ca-certificates wget gcc binutils libfindbin-libs-perl cmake libssh2-1-dev libssl-dev zlib1g-dev \
     gcc-x86-64-linux-gnu binutils-x86-64-linux-gnu
 
 COPY --from=debian-amd64 /usr/include /rootfs-amd64/usr/include
@@ -32,10 +34,10 @@ COPY --from=debian-amd64 /lib/x86_64-linux-gnu /rootfs-amd64/lib/x86_64-linux-gn
 ## Build libs/headers needed for gitextractor plugin
 RUN \
     mkdir -p /tmp/build/x86_64 && cd /tmp/build/x86_64 && \
-    wget https://github.com/libgit2/libgit2/archive/refs/tags/v1.3.2.tar.gz -O - | tar -xz && \
-    cd libgit2-1.3.2 && \
+    wget https://github.com/libgit2/libgit2/archive/refs/tags/v1.5.0.tar.gz -O - | tar -xz && \
+    cd libgit2-1.5.0 && \
     mkdir build && cd build && \
-    cmake .. -DCMAKE_C_COMPILER=x86_64-linux-gnu-gcc -DBUILD_SHARED_LIBS=ON -DCMAKE_SYSROOT=/rootfs-amd64 -DCMAKE_INSTALL_PREFIX=/usr/local/deps/x86_64 &&\
+    cmake .. -DCMAKE_C_COMPILER=x86_64-linux-gnu-gcc -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=OFF -DCMAKE_SYSROOT=/rootfs-amd64 -DCMAKE_INSTALL_PREFIX=/usr/local/deps/x86_64 &&\
     make -j install &&\
     mkdir -p /tmp/deps &&\
     cp *libgit2* /tmp/deps/ &&\
@@ -55,14 +57,14 @@ COPY --from=builder /tmp/deps/include/ /usr/include/
 ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
 
 # Install Golang
-RUN curl -L https://git.io/vQhTU | bash -s -- --version 1.20.4
+RUN curl -L https://git.io/vQhTU | bash -s -- --version 1.26.2
 RUN mv /root/go /go &&\
     mv /root/.go /usr/local/go &&\
     ln -sf /usr/local/go/bin/* /usr/bin
 
 # Install Golang Tools
 RUN export GOPATH=/go &&  \
-    go install github.com/vektra/mockery/v2@v2.20.0 &&  \
+    go install github.com/vektra/mockery/v2@v2.53.6 &&  \
     go install github.com/swaggo/swag/cmd/swag@v1.16.1
 
 # Golang Env
@@ -71,6 +73,5 @@ ENV GOPATH=/go
 ENV GOROOT=
 ENV PATH=${GOPATH}/bin:${PATH}
 
-# Python Poetry package manager
-RUN curl -sSL https://install.python-poetry.org | python3 -
-RUN ln -sf /root/.local/bin/poetry /usr/local/bin
+# Python package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_UNMANAGED_INSTALL=/usr/local/bin sh

@@ -19,7 +19,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme, Badge, Modal } from 'antd';
-import { chunk } from 'lodash';
 
 import { selectPlugins, selectAllConnections, selectWebhooks } from '@/features/connections';
 import { PATHS } from '@/config';
@@ -51,7 +50,11 @@ export const Connections = () => {
 
   const [firstPlugins, secondPlugins] = useMemo(() => {
     if (index > 0) {
-      return chunk(filterWebhookPlugins, index);
+      // Split into A-N / O-Z at the first O-Z plugin. Must be a two-way
+      // slice — `chunk(list, index)` produces equal-size groups and the
+      // destructure keeps only the first two, silently dropping any plugins
+      // in the tail once the list exceeds 2*index.
+      return [filterWebhookPlugins.slice(0, index), filterWebhookPlugins.slice(index)];
     }
     return [filterWebhookPlugins, []];
   }, [index]);
@@ -61,8 +64,9 @@ export const Connections = () => {
     setPlugin(plugin);
   };
 
-  const handleShowFormDialog = () => {
+  const handleShowFormDialog = (pluginName?: string) => {
     setType('form');
+    if (pluginName) setPlugin(pluginName);
   };
 
   const handleHideDialog = () => {
@@ -75,7 +79,7 @@ export const Connections = () => {
   };
 
   return (
-    <S.Wrapper theme={colorPrimary}>
+    <S.Wrapper>
       <h1>Connections</h1>
       <h5>
         Create and manage data connections from the following data sources or Webhooks to be used in syncing data in
@@ -168,7 +172,7 @@ export const Connections = () => {
           <ConnectionList plugin={plugin} onCreate={handleShowFormDialog} />
         </Modal>
       )}
-      {type === 'form' && pluginConfig && (
+      {type === 'form' && plugin && pluginConfig && (
         <Modal
           open
           width={820}

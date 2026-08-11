@@ -86,6 +86,8 @@ func (p Sonarqube) GetTablesInfo() []dal.Tabler {
 		&models.SonarqubeFileMetrics{},
 		&models.SonarqubeAccount{},
 		&models.SonarqubeScopeConfig{},
+		&models.SonarqubeProjectMetricsHistory{},
+		&models.SonarqubeProjectAnalysis{},
 	}
 }
 
@@ -108,6 +110,11 @@ func (p Sonarqube) SubTaskMetas() []plugin.SubTaskMeta {
 		tasks.ConvertHotspotsMeta,
 		tasks.ConvertFileMetricsMeta,
 		tasks.ConvertAccountsMeta,
+		tasks.CollectProjectMetricsHistoryMeta,
+		tasks.ExtractProjectMetricsHistoryMeta,
+		tasks.CollectProjectAnalysesMeta,
+		tasks.ExtractProjectAnalysesMeta,
+		tasks.ConvertProjectMetricsHistoryMeta,
 	}
 }
 
@@ -136,6 +143,7 @@ func (p Sonarqube) PrepareTaskData(taskCtx plugin.TaskContext, options map[strin
 		Options:       op,
 		ApiClient:     apiClient,
 		TaskStartTime: time.Now(),
+		IsCloud:       connection.IsCloud(),
 	}
 	// even we have project in _tool_sonaqube_projects, we still need to collect project to update LastAnalysisDate
 	var apiProject *models.SonarqubeApiProject
