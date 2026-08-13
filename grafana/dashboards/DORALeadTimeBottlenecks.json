@@ -373,6 +373,70 @@
       ]
     },
     {
+      "id": 13,
+      "type": "barchart",
+      "title": "Absolute time per stage, by lead-time band",
+      "description": "The same disjoint lead-time bands, but in absolute hours per PR instead of share. Each bar's height is the band's average lead time, split by stage, so you can read how many hours each stage costs as PRs move into the tail.",
+      "datasource": "mysql",
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "h",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 82,
+            "gradientMode": "none",
+            "axisPlacement": "auto",
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "auto",
+        "xTickLabelRotation": 0,
+        "showValue": "auto",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH prs AS (\n  SELECT m.id, MAX(m.pr_cycle_time)/60 cycle, MAX(COALESCE(m.pr_coding_time,0))/60 coding,\n         MAX(COALESCE(m.pr_deploy_time,0))/60 deploy, MAX(m.pr_deployed_date) merged\n  FROM project_pr_metrics m\n  WHERE m.pr_deployed_date IS NOT NULL AND m.pr_cycle_time IS NOT NULL\n    AND m.project_name IN (${project})\n    AND (m.is_authored_by_bot IS NULL OR m.is_authored_by_bot IN (${author_type}))\n    AND m.deployment_commit_id NOT LIKE '%01KTRWDKFENWZXRRF10DCEPRQ9%'\n    AND $__timeFilter(m.pr_deployed_date)\n  GROUP BY m.id\n), ev AS (\n  SELECT CONCAT('github:GithubPullRequest:2:', rv.pull_request_id) pid,\n         MIN(CASE WHEN rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_rev,\n         MIN(CASE WHEN rv.state='APPROVED' AND rv.author_username NOT REGEXP '(\\\\[bot\\\\]|-bot|_bot)' THEN rv.github_submit_at END) first_appr\n  FROM _tool_github_pull_request_reviews rv GROUP BY rv.pull_request_id\n), stages AS (\n  SELECT p.id, p.cycle, p.coding, p.deploy, p.merged,\n    CASE WHEN e.first_rev IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, pr.created_date, e.first_rev),0)/60 END pickup,\n    CASE WHEN e.first_rev IS NOT NULL AND e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_rev, e.first_appr),0)/60 END review_appr,\n    CASE WHEN e.first_appr IS NOT NULL THEN GREATEST(TIMESTAMPDIFF(MINUTE, e.first_appr, pr.merged_date),0)/60 END merge_wait,\n    GREATEST(p.cycle - p.coding - p.deploy, 0) om\n  FROM prs p JOIN pull_requests pr ON pr.id = p.id LEFT JOIN ev e ON e.pid = p.id\n),\nnorm AS (\n  SELECT s.*, NTILE(100) OVER (ORDER BY cycle) pct,\n    CASE WHEN pickup IS NULL THEN om ELSE pickup * om / NULLIF(pickup + COALESCE(review_appr,0) + COALESCE(merge_wait,0),0) END pk_n,\n    CASE WHEN pickup IS NULL THEN 0 ELSE COALESCE(review_appr,0) * om / NULLIF(pickup + COALESCE(review_appr,0) + COALESCE(merge_wait,0),0) END ra_n,\n    CASE WHEN pickup IS NULL THEN 0 ELSE COALESCE(merge_wait,0) * om / NULLIF(pickup + COALESCE(review_appr,0) + COALESCE(merge_wait,0),0) END am_n\n  FROM stages s WHERE cycle > 0\n)\nSELECT CASE WHEN pct BETWEEN 41 AND 60 THEN '1 p40-p60' WHEN pct BETWEEN 66 AND 85 THEN '2 p65-p85' ELSE '3 p85-p95' END band,\n  ROUND(AVG(coding),1) 'Coding', ROUND(AVG(COALESCE(pk_n,0)),1) 'Pickup',\n  ROUND(AVG(COALESCE(ra_n,0)),1) 'Review to approval',\n  ROUND(AVG(COALESCE(am_n,0)),1) 'Approval to merge', ROUND(AVG(deploy),1) 'Deploy'\nFROM norm\nWHERE pct BETWEEN 41 AND 60 OR pct BETWEEN 66 AND 85 OR pct BETWEEN 86 AND 95\nGROUP BY band ORDER BY band",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "id": 8,
       "type": "bargauge",
       "title": "Share of PRs with first human review within...",
@@ -382,7 +446,7 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 27
       },
       "fieldConfig": {
         "defaults": {
@@ -433,7 +497,7 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 27
       },
       "fieldConfig": {
         "defaults": {
@@ -504,7 +568,7 @@
         "h": 11,
         "w": 12,
         "x": 0,
-        "y": 23
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {
@@ -592,7 +656,7 @@
         "h": 11,
         "w": 12,
         "x": 12,
-        "y": 23
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {
@@ -633,7 +697,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 45
       },
       "options": {
         "mode": "markdown",
