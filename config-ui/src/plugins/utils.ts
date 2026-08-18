@@ -43,6 +43,12 @@ export const getPluginScopeId = (plugin: string, scope: any) => {
       return `${scope.planKey}`;
     case 'argocd':
       return `${scope.name}`;
+    case 'asana':
+      return `${scope.gid}`;
+    case 'linear':
+      return `${scope.teamId}`;
+    case 'clickup':
+      return `${scope.folderId}`;
     default:
       return `${scope.id}`;
   }
@@ -51,6 +57,12 @@ export const getPluginScopeId = (plugin: string, scope: any) => {
 export const getPluginScopeName = (plugin: string, scope: any) => {
   if (!scope) {
     return '';
+  }
+
+  if (plugin === 'claude_code') {
+    const scopeData = scope.data ?? scope;
+
+    return `${scopeData.organization ?? scope.organization ?? scope.fullName ?? scope.name ?? scope.id ?? ''}`.trim();
   }
 
   if (plugin === 'gh-copilot') {
@@ -79,6 +91,7 @@ export const getPluginScopeName = (plugin: string, scope: any) => {
 };
 
 const pluginAliasMap: Record<string, string> = {
+  claude_code: 'claude_code',
   copilot: 'gh-copilot',
 };
 

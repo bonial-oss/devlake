@@ -35,5 +35,7 @@ func All() []plugin.MigrationScript {
 		new(addAccountIdToS3Slice),
 		new(fixDedupUserTables),
 		new(resetS3FileMetaProcessed),
+		new(addLoggingTables),
+		new(addLoggingFields),
 	}
 }

@@ -21,8 +21,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import svgr from 'vite-plugin-svgr';
 
-// Allow Grafana access from the dev server when using Dev Container 
-const grafanaOrigin = process.env.VITE_GRAFANA_URL || 'http://localhost:3002';
+// Allow Grafana access from the dev server when using Dev Container
+const grafanaProtocol = process.env.VITE_GRAFANA_PROTOCOL || 'http';
+const grafanaHost = process.env.VITE_GRAFANA_HOST || 'localhost';
+const grafanaPort = process.env.VITE_GRAFANA_PORT || '3001';
+const grafanaOrigin = process.env.VITE_GRAFANA_URL || `${grafanaProtocol}://${grafanaHost}:${grafanaPort}`;
 const grafanaChangeOrigin = envBool('VITE_GRAFANA_CHANGE_ORIGIN', true);
 
 // https://vitejs.dev/config/
@@ -42,7 +45,23 @@ export default defineConfig({
       '/grafana': {
         target: grafanaOrigin,
         changeOrigin: grafanaChangeOrigin,
-        ws: true // Proxying websockets to allow features like query auto-complete
+        ws: true, // Proxying websockets to allow features like query auto-complete
+        configure: (proxy) => {
+          // Grafana's CSRF protection rejects state-changing requests (e.g.
+          // starring a dashboard, running panel queries) whose Origin/Referer
+          // host doesn't match the request Host, returning "origin not allowed".
+          // Because changeOrigin rewrites Host to the Grafana target, rewrite
+          // Origin/Referer to match so the same-origin check passes.
+          proxy.on('proxyReq', (proxyReq) => {
+            if (proxyReq.getHeader('origin')) {
+              proxyReq.setHeader('origin', grafanaOrigin);
+            }
+            const referer = proxyReq.getHeader('referer');
+            if (typeof referer === 'string') {
+              proxyReq.setHeader('referer', referer.replace(/^https?:\/\/[^/]+/, grafanaOrigin));
+            }
+          });
+        },
       },
     },
   },

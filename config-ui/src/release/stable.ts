@@ -23,6 +23,10 @@ const URLS = {
   },
   DORA: 'https://devlake.apache.org/docs/DORA/',
   PLUGIN: {
+    ASANA: {
+      BASIS: 'https://devlake.apache.org/docs/Configuration/Asana',
+      TRANSFORMATION: 'https://devlake.apache.org/docs/Configuration/Asana',
+    },
     ARGOCD: {
       BASIS: 'https://devlake.apache.org/docs/Configuration/ArgoCD',
       TRANSFORMATION:
@@ -80,6 +84,10 @@ const URLS = {
       TRANSFORMATION:
         'https://devlake.apache.org/docs/Configuration/GitLab#step-3---adding-transformation-rules-optional',
     },
+    INCIDENTIO: {
+      BASIS: 'https://devlake.apache.org/docs/Configuration/Incidentio',
+      RATE_LIMIT: 'https://devlake.apache.org/docs/Configuration/Incidentio#fixed-rate-limit-optional',
+    },
     JENKINS: {
       BASIS: 'https://devlake.apache.org/docs/Configuration/Jenkins',
       RATE_LIMIT: 'https://devlake.apache.org/docs/Configuration/Jenkins#fixed-rate-limit-optional',
@@ -102,6 +110,10 @@ const URLS = {
     PAGERDUTY: {
       BASIS: 'https://devlake.apache.org/docs/Configuration/PagerDuty',
       RATE_LIMIT: 'https://devlake.apache.org/docs/Configuration/PagerDuty/#custom-rate-limit-optional',
+    },
+    ROOTLY: {
+      BASIS: 'https://devlake.apache.org/docs/Configuration/Rootly',
+      RATE_LIMIT: 'https://devlake.apache.org/docs/Configuration/Rootly#fixed-rate-limit-optional',
     },
     SLACK: {
       BASIS: 'https://devlake.apache.org/docs/Configuration/Slack',

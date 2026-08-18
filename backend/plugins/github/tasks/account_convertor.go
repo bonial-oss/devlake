@@ -18,7 +18,6 @@ limitations under the License.
 package tasks
 
 import (
-	"reflect"
 	"strings"
 
 	"github.com/apache/incubator-devlake/core/dal"
@@ -32,6 +31,19 @@ import (
 	"github.com/apache/incubator-devlake/plugins/github/models"
 )
 
+// repoAccountForConvert is the row projected by ConvertAccounts' query: every
+// account referenced by the repo (from _tool_github_repo_accounts), enriched
+// with profile detail from _tool_github_accounts when it was collected. The
+// embedded NoPKModel carries the RawDataOrigin across to the domain row.
+type repoAccountForConvert struct {
+	Id        int
+	Login     string
+	Name      string
+	Email     string
+	AvatarUrl string
+	common.NoPKModel
+}
+
 func init() {
 	RegisterSubtaskMeta(&ConvertAccountsMeta)
 }
@@ -40,59 +52,81 @@ var ConvertAccountsMeta = plugin.SubTaskMeta{
 	Name:             "Convert Users",
 	EntryPoint:       ConvertAccounts,
 	EnabledByDefault: true,
-	Description:      "Convert tool layer table github_accounts into  domain layer table accounts",
+	Description:      "Convert every account referenced by the repo (tool layer repo_accounts, enriched by github_accounts) into domain layer table accounts",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_CROSS},
 	DependencyTables: []string{
-		models.GithubAccount{}.TableName(),     // cursor
-		models.GithubRepoAccount{}.TableName(), // cursor
-		models.GithubAccountOrg{}.TableName()}, // account id gen
+		models.GithubRepoAccount{}.TableName(), // cursor (every user referenced by the repo)
+		models.GithubAccount{}.TableName(),     // left-join enrichment (profile detail, optional)
+		models.GithubAccountOrg{}.TableName()}, // org pluck
 	ProductTables: []string{crossdomain.Account{}.TableName()},
-}
-
-type GithubAccountWithOrg struct {
-	models.GithubAccount
-	Login string `json:"login" gorm:"type:varchar(255)"`
-	common.NoPKModel
 }
 
 func ConvertAccounts(taskCtx plugin.SubTaskContext) errors.Error {
 	db := taskCtx.GetDal()
 	data := taskCtx.GetData().(*GithubTaskData)
 
-	cursor, err := db.Cursor(
-		dal.Select("_tool_github_accounts.*"),
-		dal.From(&models.GithubAccount{}),
-		dal.Where(
-			"repo_github_id = ? and _tool_github_accounts.connection_id=?",
-			data.Options.GithubId,
-			data.Options.ConnectionId,
-		),
-		dal.Join(`left join _tool_github_repo_accounts gra on (
-			_tool_github_accounts.connection_id = gra.connection_id
-			AND _tool_github_accounts.id = gra.account_id
-		)`),
-	)
-	if err != nil {
-		return err
-	}
-	defer cursor.Close()
-
 	accountIdGen := didgen.NewDomainIdGenerator(&models.GithubAccount{})
 
-	converter, err := api.NewDataConverter(api.DataConverterArgs{
-		InputRowType: reflect.TypeOf(models.GithubAccount{}),
-		Input:        cursor,
-		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
-			Ctx: taskCtx,
+	converter, err := api.NewStatefulDataConverter(&api.StatefulDataConverterArgs[repoAccountForConvert]{
+		SubtaskCommonArgs: &api.SubtaskCommonArgs{
+			SubTaskContext: taskCtx,
+			Table:          RAW_ACCOUNT_TABLE,
 			Params: GithubApiParams{
 				ConnectionId: data.Options.ConnectionId,
 				Name:         data.Options.Name,
 			},
-			Table: RAW_ACCOUNT_TABLE,
 		},
-		Convert: func(inputRow interface{}) ([]interface{}, errors.Error) {
-			githubUser := inputRow.(*models.GithubAccount)
-
+		// Source every account referenced by this repo from _tool_github_repo_accounts
+		// (which the issue/PR/commit extractors populate for any author, assignee, or
+		// merged-by user), and LEFT JOIN _tool_github_accounts for profile detail when it
+		// was collected. This guarantees a domain `accounts` row for every CreatorId /
+		// AuthorId the other convertors emit, instead of only for users who committed.
+		// Raw-data provenance follows the same rule as the profile fields: the enriched
+		// _tool_github_accounts row when we collected one, the repo_accounts row otherwise.
+		// Note the consequence: fallback-provenance rows carry a _raw_data_table other than
+		// _raw_github_api_accounts, so the batch-save divider's full-sync delete-then-reinsert
+		// (keyed on this converter's raw table) never deletes them; they are reconciled by
+		// upsert only. Scope deletion still covers them via _raw_data_params.
+		// SQL is kept DB-agnostic (no backtick quoting, COALESCE not IFNULL) so it runs on
+		// both MySQL and PostgreSQL.
+		Input: func(stateManager *api.SubtaskStateManager) (dal.Rows, errors.Error) {
+			clauses := []dal.Clause{
+				dal.Select(`_tool_github_repo_accounts.account_id AS id,
+					_tool_github_repo_accounts.login AS login,
+					COALESCE(ga.name, '') AS name,
+					COALESCE(ga.email, '') AS email,
+					COALESCE(ga.avatar_url, '') AS avatar_url,
+					COALESCE(ga._raw_data_params, _tool_github_repo_accounts._raw_data_params) AS _raw_data_params,
+					COALESCE(ga._raw_data_table, _tool_github_repo_accounts._raw_data_table) AS _raw_data_table,
+					COALESCE(ga._raw_data_id, _tool_github_repo_accounts._raw_data_id) AS _raw_data_id,
+					COALESCE(ga._raw_data_remark, _tool_github_repo_accounts._raw_data_remark) AS _raw_data_remark`),
+				dal.From(&models.GithubRepoAccount{}),
+				dal.Join(`left join _tool_github_accounts ga on (
+					ga.connection_id = _tool_github_repo_accounts.connection_id
+					AND ga.id = _tool_github_repo_accounts.account_id
+				)`),
+				dal.Where(
+					`_tool_github_repo_accounts.repo_github_id = ?
+						AND _tool_github_repo_accounts.connection_id = ?
+						AND _tool_github_repo_accounts.account_id > 0`,
+					data.Options.GithubId,
+					data.Options.ConnectionId,
+				),
+			}
+			if stateManager.IsIncremental() {
+				since := stateManager.GetSince()
+				if since != nil {
+					// Incremental cursor intentionally tracks _tool_github_repo_accounts.updated_at
+					// (repo membership), not _tool_github_accounts.updated_at (profile freshness):
+					// account-detail re-enrichment is reconciled on the next full sync. Do not switch
+					// this back to _tool_github_accounts — that is what left issue/PR-only authors
+					// orphaned (#8886).
+					clauses = append(clauses, dal.Where("_tool_github_repo_accounts.updated_at >= ?", since))
+				}
+			}
+			return db.Cursor(clauses...)
+		},
+		Convert: func(githubUser *repoAccountForConvert) ([]interface{}, errors.Error) {
 			// query related orgs
 			var orgs []string
 			err := db.Pluck(`org_login`, &orgs,

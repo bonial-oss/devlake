@@ -19,17 +19,23 @@
 import { IPluginConfig } from '@/types';
 
 import { ArgoCDConfig } from './argocd';
+import { AsanaConfig } from './asana';
 import { AzureConfig, AzureGoConfig } from './azure';
 import { BambooConfig } from './bamboo';
 import { BitbucketConfig } from './bitbucket';
 import { BitbucketServerConfig } from './bitbucket-server';
 import { CircleCIConfig } from './circleci';
+import { ClaudeCodeConfig } from './claude-code';
+import { ClickUpConfig } from './clickup';
 import { GitHubConfig } from './github';
 import { GhCopilotConfig } from './gh-copilot';
 import { GitLabConfig } from './gitlab';
+import { IncidentioConfig } from './incidentio';
 import { JenkinsConfig } from './jenkins';
 import { JiraConfig } from './jira';
+import { LinearConfig } from './linear';
 import { PagerDutyConfig } from './pagerduty';
+import { RootlyConfig } from './rootly';
 import { SonarQubeConfig } from './sonarqube';
 import { TAPDConfig } from './tapd';
 import { WebhookConfig } from './webhook';
@@ -39,22 +45,30 @@ import { QDevConfig } from './q-dev';
 import { TeambitionConfig } from './teambition';
 import { TestmoConfig } from './testmo';
 import { SlackConfig } from './slack/config';
+import { TempoConfig } from './tempo';
 
 export const pluginConfigs: IPluginConfig[] = [
   ArgoCDConfig,
+  AsanaConfig,
   AzureConfig,
   AzureGoConfig,
   BambooConfig,
   BitbucketConfig,
   BitbucketServerConfig,
   CircleCIConfig,
+  ClaudeCodeConfig,
+  ClickUpConfig,
   GitHubConfig,
   GhCopilotConfig,
   GitLabConfig,
+  IncidentioConfig,
   JenkinsConfig,
   JiraConfig,
+  LinearConfig,
   PagerDutyConfig,
+  RootlyConfig,
   SlackConfig,
+  TempoConfig,
   QDevConfig,
   SonarQubeConfig,
   TAPDConfig,

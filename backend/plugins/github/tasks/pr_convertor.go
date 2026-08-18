@@ -18,8 +18,6 @@ limitations under the License.
 package tasks
 
 import (
-	"reflect"
-
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/models/domainlayer"
@@ -53,32 +51,33 @@ func ConvertPullRequests(taskCtx plugin.SubTaskContext) errors.Error {
 	data := taskCtx.GetData().(*GithubTaskData)
 	repoId := data.Options.GithubId
 
-	cursor, err := db.Cursor(
-		dal.From(&models.GithubPullRequest{}),
-		dal.Where("repo_id = ? and connection_id = ?", repoId, data.Options.ConnectionId),
-	)
-	if err != nil {
-		return err
-	}
-	defer cursor.Close()
-
 	prIdGen := didgen.NewDomainIdGenerator(&models.GithubPullRequest{})
 	repoIdGen := didgen.NewDomainIdGenerator(&models.GithubRepo{})
 	accountIdGen := didgen.NewDomainIdGenerator(&models.GithubAccount{})
 
-	converter, err := api.NewDataConverter(api.DataConverterArgs{
-		InputRowType: reflect.TypeOf(models.GithubPullRequest{}),
-		Input:        cursor,
-		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
-			Ctx: taskCtx,
+	converter, err := api.NewStatefulDataConverter(&api.StatefulDataConverterArgs[models.GithubPullRequest]{
+		SubtaskCommonArgs: &api.SubtaskCommonArgs{
+			SubTaskContext: taskCtx,
+			Table:          RAW_PULL_REQUEST_TABLE,
 			Params: GithubApiParams{
 				ConnectionId: data.Options.ConnectionId,
 				Name:         data.Options.Name,
 			},
-			Table: RAW_PULL_REQUEST_TABLE,
 		},
-		Convert: func(inputRow interface{}) ([]interface{}, errors.Error) {
-			pr := inputRow.(*models.GithubPullRequest)
+		Input: func(stateManager *api.SubtaskStateManager) (dal.Rows, errors.Error) {
+			clauses := []dal.Clause{
+				dal.From(&models.GithubPullRequest{}),
+				dal.Where("repo_id = ? and connection_id = ?", repoId, data.Options.ConnectionId),
+			}
+			if stateManager.IsIncremental() {
+				since := stateManager.GetSince()
+				if since != nil {
+					clauses = append(clauses, dal.Where("github_updated_at >= ?", since))
+				}
+			}
+			return db.Cursor(clauses...)
+		},
+		Convert: func(pr *models.GithubPullRequest) ([]interface{}, errors.Error) {
 			domainPr := &code.PullRequest{
 				DomainEntity: domainlayer.DomainEntity{
 					Id: prIdGen.Generate(data.Options.ConnectionId, pr.GithubId),
@@ -88,7 +87,6 @@ func ConvertPullRequests(taskCtx plugin.SubTaskContext) errors.Error {
 				OriginalStatus: pr.State,
 				Title:          pr.Title,
 				Url:            pr.Url,
-				AuthorId:       accountIdGen.Generate(data.Options.ConnectionId, pr.AuthorId),
 				AuthorName:     pr.AuthorName,
 				Description:    pr.Body,
 				CreatedDate:    pr.GithubCreatedAt,
@@ -105,8 +103,16 @@ func ConvertPullRequests(taskCtx plugin.SubTaskContext) errors.Error {
 				Additions:      pr.Additions,
 				Deletions:      pr.Deletions,
 				MergedByName:   pr.MergedByName,
-				MergedById:     accountIdGen.Generate(data.Options.ConnectionId, pr.MergedById),
 				IsDraft:        pr.IsDraft,
+			}
+			// Generate account ids only for real users (#8886): a zero AuthorId (deleted
+			// user) or zero MergedById (unmerged PR) would otherwise produce an id like
+			// github:GithubAccount:1:0 that no accounts row can ever match.
+			if pr.AuthorId != 0 {
+				domainPr.AuthorId = accountIdGen.Generate(data.Options.ConnectionId, pr.AuthorId)
+			}
+			if pr.MergedById != 0 {
+				domainPr.MergedById = accountIdGen.Generate(data.Options.ConnectionId, pr.MergedById)
 			}
 			if pr.State == "open" || pr.State == "OPEN" {
 				domainPr.Status = code.OPEN

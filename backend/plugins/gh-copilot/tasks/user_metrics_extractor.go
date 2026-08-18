@@ -33,6 +33,7 @@ type userDailyReport struct {
 	ReportStartDay                string                 `json:"report_start_day"`
 	ReportEndDay                  string                 `json:"report_end_day"`
 	Day                           string                 `json:"day"`
+	OrganizationId                string                 `json:"organization_id"`
 	EnterpriseId                  string                 `json:"enterprise_id"`
 	UserId                        int64                  `json:"user_id"`
 	UserLogin                     string                 `json:"user_login"`
@@ -45,11 +46,16 @@ type userDailyReport struct {
 	LocDeletedSum                 int                    `json:"loc_deleted_sum"`
 	UsedAgent                     bool                   `json:"used_agent"`
 	UsedChat                      bool                   `json:"used_chat"`
+	UsedCli                       bool                   `json:"used_cli"`
+	UsedCopilotCodeReviewActive   bool                   `json:"used_copilot_code_review_active"`
+	UsedCopilotCodeReviewPassive  bool                   `json:"used_copilot_code_review_passive"`
+	AiCreditsUsed                 float64                `json:"ai_credits_used"`
 	TotalsByIde                   []userTotalsByIde      `json:"totals_by_ide"`
 	TotalsByFeature               []totalsByFeature      `json:"totals_by_feature"`
 	TotalsByLanguageFeature       []totalsByLangFeature  `json:"totals_by_language_feature"`
 	TotalsByLanguageModel         []totalsByLangModel    `json:"totals_by_language_model"`
 	TotalsByModelFeature          []totalsByModelFeature `json:"totals_by_model_feature"`
+	TotalsByCli                   *totalsByCli           `json:"totals_by_cli"`
 }
 
 type userTotalsByIde struct {
@@ -78,11 +84,6 @@ func ExtractUserMetrics(taskCtx plugin.SubTaskContext) errors.Error {
 	connection := data.Connection
 	connection.Normalize()
 
-	if !connection.HasEnterprise() {
-		taskCtx.GetLogger().Info("No enterprise configured, skipping user metrics extraction")
-		return nil
-	}
-
 	params := copilotRawParams{
 		ConnectionId: data.Options.ConnectionId,
 		ScopeId:      data.Options.ScopeId,
@@ -110,15 +111,20 @@ func ExtractUserMetrics(taskCtx plugin.SubTaskContext) errors.Error {
 			var results []interface{}
 
 			// Main user daily metrics
-			results = append(results, &models.GhCopilotUserDailyMetrics{
-				ConnectionId: data.Options.ConnectionId,
-				ScopeId:      data.Options.ScopeId,
-				Day:          day,
-				UserId:       u.UserId,
-				EnterpriseId: u.EnterpriseId,
-				UserLogin:    u.UserLogin,
-				UsedAgent:    u.UsedAgent,
-				UsedChat:     u.UsedChat,
+			userMetrics := &models.GhCopilotUserDailyMetrics{
+				ConnectionId:                 data.Options.ConnectionId,
+				ScopeId:                      data.Options.ScopeId,
+				Day:                          day,
+				UserId:                       u.UserId,
+				OrganizationId:               u.OrganizationId,
+				EnterpriseId:                 u.EnterpriseId,
+				UserLogin:                    u.UserLogin,
+				UsedAgent:                    u.UsedAgent,
+				UsedChat:                     u.UsedChat,
+				UsedCli:                      u.UsedCli,
+				UsedCopilotCodeReviewActive:  u.UsedCopilotCodeReviewActive,
+				UsedCopilotCodeReviewPassive: u.UsedCopilotCodeReviewPassive,
+				AiCreditsUsed:                u.AiCreditsUsed,
 				CopilotActivityMetrics: models.CopilotActivityMetrics{
 					UserInitiatedInteractionCount: u.UserInitiatedInteractionCount,
 					CodeGenerationActivityCount:   u.CodeGenerationActivityCount,
@@ -128,7 +134,19 @@ func ExtractUserMetrics(taskCtx plugin.SubTaskContext) errors.Error {
 					LocAddedSum:                   u.LocAddedSum,
 					LocDeletedSum:                 u.LocDeletedSum,
 				},
-			})
+			}
+			if u.TotalsByCli != nil {
+				userMetrics.CopilotCliMetrics = models.CopilotCliMetrics{
+					CliSessionCount: u.TotalsByCli.SessionCount,
+					CliRequestCount: u.TotalsByCli.RequestCount,
+					CliPromptCount:  u.TotalsByCli.PromptCount,
+				}
+				if u.TotalsByCli.TokenUsage != nil {
+					userMetrics.CopilotCliMetrics.CliOutputTokenSum = u.TotalsByCli.TokenUsage.OutputTokensSum
+					userMetrics.CopilotCliMetrics.CliPromptTokenSum = u.TotalsByCli.TokenUsage.PromptTokensSum
+				}
+			}
+			results = append(results, userMetrics)
 
 			// User by IDE
 			for _, ide := range u.TotalsByIde {

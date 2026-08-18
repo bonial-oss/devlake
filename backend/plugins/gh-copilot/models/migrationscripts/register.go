@@ -29,5 +29,9 @@ func All() []plugin.MigrationScript {
 		new(addScopeConfig20260121),
 		new(migrateToUsageMetricsV2),
 		new(addPRFieldsToEnterpriseMetrics),
+		new(addOrganizationIdToUserMetrics),
+		new(addCopilotMetricsGaps),
+		new(addAiCreditUsageMetrics),
+		new(fixAiCreditUsageBreakdownColumns),
 	}
 }

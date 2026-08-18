@@ -19,22 +19,64 @@ package tasks
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
 
 	"github.com/apache/incubator-devlake/core/errors"
+	"github.com/apache/incubator-devlake/core/log"
 	"github.com/apache/incubator-devlake/core/plugin"
 	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 )
 
 const rawUserMetricsTable = "copilot_user_metrics"
 
+func collectUserMetricsRecords(meta *reportMetadataResponse, logger log.Logger) ([]json.RawMessage, errors.Error) {
+	var results []json.RawMessage
+	for _, link := range meta.DownloadLinks {
+		reportBody, dlErr := downloadReport(link, logger)
+		if dlErr != nil {
+			return nil, dlErr
+		}
+		if reportBody == nil {
+			continue // blob not found, skip
+		}
+		// Parse JSONL: split by newlines and return each non-empty line.
+		userRecords, parseErr := parseJSONL(reportBody)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		results = append(results, userRecords...)
+	}
+	return results, nil
+}
+
+func parseUserMetricsReportResponse(res *http.Response, logger log.Logger) ([]json.RawMessage, errors.Error) {
+	body, readErr := io.ReadAll(res.Body)
+	res.Body.Close()
+	if readErr != nil {
+		return nil, errors.Default.Wrap(readErr, "failed to read report metadata")
+	}
+	if isEmptyReport(body) {
+		return nil, nil
+	}
+
+	// Parse the metadata from the body we already read above. Previously this
+	// re-read res.Body via parseReportMetadataResponse, but the body had already
+	// been consumed by io.ReadAll, so the second read returned empty and the
+	// collector silently produced zero user-metrics records.
+	meta, err := parseReportMetadata(body, logger)
+	if err != nil || meta == nil {
+		return nil, err
+	}
+
+	return collectUserMetricsRecords(meta, logger)
+}
+
 // CollectUserMetrics collects enterprise user-level daily Copilot usage reports.
 // These reports are in JSONL format (one JSON object per line per user).
-// Only available for enterprise-scoped connections.
+// Utilizes the enterprise or organization endpoints depending on connection configuration
 func CollectUserMetrics(taskCtx plugin.SubTaskContext) errors.Error {
 	data, ok := taskCtx.TaskContext().GetData().(*GhCopilotTaskData)
 	if !ok {
@@ -43,14 +85,19 @@ func CollectUserMetrics(taskCtx plugin.SubTaskContext) errors.Error {
 	connection := data.Connection
 	connection.Normalize()
 
-	if !connection.HasEnterprise() {
-		taskCtx.GetLogger().Info("No enterprise configured, skipping user metrics collection")
-		return nil
-	}
-
 	apiClient, err := CreateApiClient(taskCtx.TaskContext(), connection)
 	if err != nil {
 		return err
+	}
+
+	var urlTemplate string
+
+	if connection.HasEnterprise() {
+		urlTemplate = copilotAPIPath("enterprises", connection.Enterprise, "copilot/metrics/reports/users-1-day")
+	} else if connection.Organization != "" {
+		urlTemplate = copilotAPIPath("orgs", connection.Organization, "copilot/metrics/reports/users-1-day")
+	} else {
+		return nil
 	}
 
 	rawArgs := helper.RawDataSubTaskArgs{
@@ -71,15 +118,15 @@ func CollectUserMetrics(taskCtx plugin.SubTaskContext) errors.Error {
 
 	now := time.Now().UTC()
 	start, until := computeReportDateRange(now, collector.GetSince())
+	start = clampDailyMetricsStartForBackfill(start, until)
 	logger := taskCtx.GetLogger()
 
 	dayIter := newDayIterator(start, until)
 
 	err = collector.InitCollector(helper.ApiCollectorArgs{
-		ApiClient: apiClient,
-		Input:     dayIter,
-		UrlTemplate: fmt.Sprintf("enterprises/%s/copilot/metrics/reports/users-1-day",
-			connection.Enterprise),
+		ApiClient:   apiClient,
+		Input:       dayIter,
+		UrlTemplate: urlTemplate,
 		Query: func(reqData *helper.RequestData) (url.Values, errors.Error) {
 			input := reqData.Input.(*dayInput)
 			q := url.Values{}
@@ -88,39 +135,9 @@ func CollectUserMetrics(taskCtx plugin.SubTaskContext) errors.Error {
 		},
 		Incremental:   true,
 		Concurrency:   1,
-		AfterResponse: ignore404,
+		AfterResponse: ignoreNoContent,
 		ResponseParser: func(res *http.Response) ([]json.RawMessage, errors.Error) {
-			body, readErr := io.ReadAll(res.Body)
-			res.Body.Close()
-			if readErr != nil {
-				return nil, errors.Default.Wrap(readErr, "failed to read report metadata")
-			}
-
-			var meta reportMetadataResponse
-			if jsonErr := json.Unmarshal(body, &meta); jsonErr != nil {
-				return nil, errors.Default.Wrap(jsonErr, "failed to parse report metadata")
-			}
-
-			// User reports are JSONL — each download link returns one file where
-			// each line is a separate JSON object for one user's daily metrics.
-			// We download the file and split into individual JSON messages.
-			var results []json.RawMessage
-			for _, link := range meta.DownloadLinks {
-				reportBody, dlErr := downloadReport(link, logger)
-				if dlErr != nil {
-					return nil, dlErr
-				}
-				if reportBody == nil {
-					continue // blob not found, skip
-				}
-				// Parse JSONL: split by newlines and return each non-empty line
-				userRecords, parseErr := parseJSONL(reportBody)
-				if parseErr != nil {
-					return nil, parseErr
-				}
-				results = append(results, userRecords...)
-			}
-			return results, nil
+			return parseUserMetricsReportResponse(res, logger)
 		},
 	})
 	if err != nil {

@@ -16,28 +16,21 @@
  *
  */
 
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { RouterProvider } from 'react-router-dom';
-import { ConfigProvider } from 'antd';
 
 import { PageLoading } from '@/components';
+import { ThemeProvider } from '@/theme';
 
 import { store } from './app/store';
-import { router } from './app/routrer';
+import { router } from './app/router';
 import './index.css';
 
-ReactDOM.render(
-  <ConfigProvider
-    theme={{
-      token: {
-        colorPrimary: import.meta.env.DEVLAKE_COLOR_CUSTOM ?? '#7497F7',
-      },
-    }}
-  >
-    <Provider store={store}>
+createRoot(document.getElementById('root') as HTMLElement).render(
+  <Provider store={store}>
+    <ThemeProvider>
       <RouterProvider router={router} fallbackElement={<PageLoading />} />
-    </Provider>
-  </ConfigProvider>,
-  document.getElementById('root'),
+    </ThemeProvider>
+  </Provider>,
 );

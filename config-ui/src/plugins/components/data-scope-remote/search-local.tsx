@@ -219,7 +219,7 @@ export const SearchLocal = ({ mode, plugin, connectionId, config, disabledScope,
 
         {status === 'loaded' && (
           <S.JobLoad>
-            <CheckCircleFilled style={{ color: '#4DB764' }} />
+            <CheckCircleFilled style={{ color: 'var(--devlake-color-success)' }} />
             <span className="count">{miller.items.length}</span> scopes found
           </S.JobLoad>
         )}
@@ -239,7 +239,7 @@ export const SearchLocal = ({ mode, plugin, connectionId, config, disabledScope,
         <MillerColumnsSelect
           mode={mode}
           items={scopes}
-          columnCount={search ? 1 : config.millerColumn?.columnCount ?? 1}
+          columnCount={search ? 1 : (config.millerColumn?.columnCount ?? 1)}
           columnHeight={300}
           getCanExpand={(it) => it.type === 'group'}
           getHasMore={(id) => !miller.loadedIds.includes(id ?? 'root')}
