@@ -410,8 +410,9 @@ func batchFetchFirstReviews(repoIds []string, db dal.Dal, botAccountIds []string
 // another owner. R_ship is resolved by deployment URL or by commit membership
 // (repo_commits), the latter covering renamed repos whose deployments keep the
 // old URL. The commit join is a hash join of the project's scope deployments
-// against repo_commits, which has no index on commit_sha alone. C_P
-// (CandidateRepoIds) is the union.
+// against repo_commits, which has no index on commit_sha alone, so it only runs
+// for projects that have deployments whose URL does not resolve, and only over
+// those deployments. C_P (CandidateRepoIds) is the union.
 type leadTimeScope struct {
 	ProjectName         string
 	ScopeIds            []string
@@ -453,8 +454,10 @@ type deployUrlRow struct {
 }
 
 // loadLeadTimeScope resolves S_P, R_P, R_ship(P) and C_P for projectName.
-// Deployments carry an empty repo_id, so R_ship is resolved by matching
-// normalized repo_url against repos.url in Go, which keeps the SQL portable.
+// Deployments carry an empty repo_id, so R_ship is resolved by normalized URL
+// (repo_url against repos.url, matched in Go so the SQL stays portable) and, for
+// deployments whose URL does not resolve to a repo, by the deployment commit's
+// membership in repo_commits.
 func loadLeadTimeScope(projectName string, db dal.Dal, logger log.Logger) (*leadTimeScope, errors.Error) {
 	scope := &leadTimeScope{
 		ProjectName: projectName,
@@ -541,26 +544,37 @@ func loadLeadTimeScope(projectName string, db dal.Dal, logger log.Logger) (*lead
 		); err != nil {
 			return nil, errors.Default.Wrap(err, "failed to load repos shipped by project scopes")
 		}
+		// NULL and empty repo_url values are kept on purpose: they never resolve
+		// by URL and must reach the commit-membership query below.
+		var unresolvedUrls []string
 		for _, row := range shipped {
-			for _, id := range reposByUrl[normalizeRepoUrl(row.RepoUrl)] {
+			ids, ok := reposByUrl[normalizeRepoUrl(row.RepoUrl)]
+			if !ok {
+				unresolvedUrls = append(unresolvedUrls, row.RepoUrl)
+				continue
+			}
+			for _, id := range ids {
 				candidates[id] = struct{}{}
 			}
 		}
 
 		// Renamed repos keep their old URL on deployments. Resolve those by the
-		// deployment commit instead, the same way batchFetchDeployments selects D.
-		var shippedByCommit []*repoIdRow
-		if err := db.All(&shippedByCommit,
-			dal.Select("DISTINCT rc.repo_id AS repo_id"),
-			dal.From("repo_commits rc"),
-			dal.Join("INNER JOIN cicd_deployment_commits dc ON dc.commit_sha = rc.commit_sha"),
-			dal.Where("dc.environment = ? AND dc.result = ? AND dc.cicd_scope_id IN (?)",
-				"PRODUCTION", devops.RESULT_SUCCESS, scope.ScopeIds),
-		); err != nil {
-			return nil, errors.Default.Wrap(err, "failed to load repos shipped by project scopes (by commit)")
-		}
-		for _, row := range shippedByCommit {
-			candidates[row.RepoId] = struct{}{}
+		// deployment commit instead, the same way batchFetchDeployments selects D,
+		// restricted to the deployments whose URL did not resolve.
+		if len(unresolvedUrls) > 0 {
+			var shippedByCommit []*repoIdRow
+			if err := db.All(&shippedByCommit,
+				dal.Select("DISTINCT rc.repo_id AS repo_id"),
+				dal.From("repo_commits rc"),
+				dal.Join("INNER JOIN cicd_deployment_commits dc ON dc.commit_sha = rc.commit_sha"),
+				dal.Where("dc.environment = ? AND dc.result = ? AND dc.finished_date IS NOT NULL AND dc.cicd_scope_id IN (?) AND (dc.repo_url IN (?) OR dc.repo_url IS NULL OR dc.repo_url = '')",
+					"PRODUCTION", devops.RESULT_SUCCESS, scope.ScopeIds, unresolvedUrls),
+			); err != nil {
+				return nil, errors.Default.Wrap(err, "failed to load repos shipped by project scopes (by commit)")
+			}
+			for _, row := range shippedByCommit {
+				candidates[row.RepoId] = struct{}{}
+			}
 		}
 	}
 
@@ -593,8 +607,11 @@ func loadLeadTimeScope(projectName string, db dal.Dal, logger log.Logger) (*lead
 // project (retired webhooks) are ignored; they belong to no team.
 //
 // Deployments are selected by repo_url or by commit membership in repo_commits
-// of the candidate repos, never by which project owns the webhook, so every
-// project that considers a repo sees the same deployments and the same commit
+// of the candidate repos, never by which project owns the webhook. That is two
+// plain portable queries, de-duplicated and ordered in Go, instead of an OR over
+// an IN-subquery that neither MySQL nor PostgreSQL can turn into a semi-join.
+// Because selection ignores webhook ownership, every project that considers a
+// repo sees the same deployments and the same commit
 // graph for it and agrees on which deployment first shipped a commit. This
 // assumes a commit SHA belongs to one repo and a cicd scope is mapped to one
 // project; otherwise two projects can still differ.
@@ -607,9 +624,9 @@ func batchFetchDeployments(scope *leadTimeScope, db dal.Dal) (map[string]*devops
 		return map[string]*devops.CicdDeploymentCommit{}, nil
 	}
 
-	// 1. Successful production deployments on mapped webhooks, earliest first,
-	//    that match a candidate repo by URL or by commit membership.
-	clauses := []dal.Clause{
+	// 1. Successful production deployments on mapped webhooks that match a
+	//    candidate repo by URL or by commit membership, earliest first.
+	base := []dal.Clause{
 		dal.Select("dc.*"),
 		dal.From("cicd_deployment_commits dc"),
 		dal.Where("dc.environment = ?", "PRODUCTION"), // TODO: remove this when multi-environment is supported
@@ -617,20 +634,53 @@ func batchFetchDeployments(scope *leadTimeScope, db dal.Dal) (map[string]*devops
 		dal.Where("dc.finished_date IS NOT NULL"),
 		dal.Where("dc.cicd_scope_id IN (?)", scope.MappedScopeIds),
 	}
+	byId := map[string]*devops.CicdDeploymentCommit{}
+	collect := func(rows []*devops.CicdDeploymentCommit) {
+		for _, d := range rows {
+			if _, seen := byId[d.Id]; !seen {
+				byId[d.Id] = d
+			}
+		}
+	}
+	// 1a. Deployments whose repo_url resolves to a candidate repo.
 	if len(scope.CandidateDeployUrls) > 0 {
-		clauses = append(clauses, dal.Where(
-			"(dc.repo_url IN (?) OR dc.commit_sha IN (SELECT rc.commit_sha FROM repo_commits rc WHERE rc.repo_id IN (?)))",
-			scope.CandidateDeployUrls, scope.CandidateRepoIds))
-	} else {
-		clauses = append(clauses, dal.Where(
-			"dc.commit_sha IN (SELECT rc.commit_sha FROM repo_commits rc WHERE rc.repo_id IN (?))",
-			scope.CandidateRepoIds))
+		var rows []*devops.CicdDeploymentCommit
+		if err := db.All(&rows, append(append([]dal.Clause{}, base...), dal.Where("dc.repo_url IN (?)", scope.CandidateDeployUrls))...); err != nil {
+			return nil, errors.Default.Wrap(err, "failed to fetch deployments by repo url")
+		}
+		collect(rows)
 	}
-	clauses = append(clauses, dal.Orderby("dc.finished_date ASC, dc.id ASC"))
-	var deployments []*devops.CicdDeploymentCommit
-	if err := db.All(&deployments, clauses...); err != nil {
-		return nil, errors.Default.Wrap(err, "failed to fetch deployments")
+	// 1b. Deployments whose commit belongs to a candidate repo (covers renamed repos
+	//     whose deployments still carry the old URL). The join can repeat a
+	//     deployment when a commit is in several repos; byId de-duplicates.
+	{
+		var rows []*devops.CicdDeploymentCommit
+		if err := db.All(&rows, append(append([]dal.Clause{}, base...),
+			dal.Join("INNER JOIN repo_commits rc ON rc.commit_sha = dc.commit_sha"),
+			dal.Where("rc.repo_id IN (?)", scope.CandidateRepoIds),
+		)...); err != nil {
+			return nil, errors.Default.Wrap(err, "failed to fetch deployments by commit")
+		}
+		collect(rows)
 	}
+	deployments := make([]*devops.CicdDeploymentCommit, 0, len(byId))
+	for _, d := range byId {
+		deployments = append(deployments, d)
+	}
+	// FinishedDate is non-nil because of the filter above; a nil still sorts
+	// earliest rather than panicking if the filter is ever relaxed.
+	sort.Slice(deployments, func(i, j int) bool {
+		fi, fj := deployments[i].FinishedDate, deployments[j].FinishedDate
+		switch {
+		case fi == nil && fj != nil:
+			return true
+		case fi != nil && fj == nil:
+			return false
+		case fi != nil && fj != nil && !fi.Equal(*fj):
+			return fi.Before(*fj)
+		}
+		return deployments[i].Id < deployments[j].Id
+	})
 
 	// 2. Commit graph of the candidate repos as child -> parents adjacency.
 	parents := map[string][]string{}
