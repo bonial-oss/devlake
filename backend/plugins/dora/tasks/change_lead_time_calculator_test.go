@@ -154,3 +154,17 @@ func TestAttributeCommits_NoDeployments(t *testing.T) {
 	m := attributeCommitsToDeployments(nil, map[string][]string{"c2": {"c1"}})
 	assert.Empty(t, m)
 }
+
+func TestNormalizeRepoUrl(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/acme/repo-x.git":    "https://github.com/acme/repo-x",
+		"https://github.com/acme/repo-x":        "https://github.com/acme/repo-x",
+		"https://github.com/acme/repo-x/":       "https://github.com/acme/repo-x",
+		"https://github.com/acme/repo-x.git/":   "https://github.com/acme/repo-x",
+		"  HTTPS://GitHub.com/Acme/Repo-X.GIT ": "https://github.com/acme/repo-x",
+		"":                                      "",
+	}
+	for in, want := range cases {
+		assert.Equal(t, want, normalizeRepoUrl(in), "input %q", in)
+	}
+}

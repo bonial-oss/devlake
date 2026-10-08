@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/apache/incubator-devlake/core/config"
@@ -208,6 +209,16 @@ func computeTimeSpan(start, end *time.Time) *int64 {
 		return nil
 	}
 	return &minutes
+}
+
+// normalizeRepoUrl makes a deployment's repo_url comparable with repos.url.
+// Webhook deployments carry the clone URL (".git" suffix, sometimes a trailing
+// slash, arbitrary case) and an empty repo_id, so this is the only join key.
+func normalizeRepoUrl(url string) string {
+	u := strings.ToLower(strings.TrimSpace(url))
+	u = strings.TrimSuffix(u, "/")
+	u = strings.TrimSuffix(u, ".git")
+	return strings.TrimSuffix(u, "/")
 }
 
 func matchesBotFilter(botFilterRegex *regexp.Regexp, name string) bool {
