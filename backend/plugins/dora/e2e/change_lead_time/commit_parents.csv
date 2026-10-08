@@ -1,0 +1,8 @@
+commit_sha,parent_commit_sha
+pr_merge_commit1,commit1
+pr_merge_commit2,pr_merge_commit1
+commit5,pr_merge_commit2
+pr_merge_commit3,commit2
+commit6,pr_merge_commit3
+pr_merge_commit4,commit7
+commit8,pr_merge_commit4
