@@ -407,7 +407,11 @@ func batchFetchFirstReviews(repoIds []string, db dal.Dal, botAccountIds []string
 // repos currently mapped to the project. R_ship(P) are repos the project's
 // webhook has production-deployed, whether or not they are still mapped to it;
 // that is what lets a team keep the PRs it shipped after a repo moves to
-// another owner. C_P (CandidateRepoIds) is the union.
+// another owner. R_ship is resolved by deployment URL or by commit membership
+// (repo_commits), the latter covering renamed repos whose deployments keep the
+// old URL. The commit join is a hash join of the project's scope deployments
+// against repo_commits, which has no index on commit_sha alone. C_P
+// (CandidateRepoIds) is the union.
 type leadTimeScope struct {
 	ProjectName         string
 	ScopeIds            []string
@@ -438,6 +442,10 @@ type projectMappingRow struct {
 type repoUrlRow struct {
 	Id  string `gorm:"column:id"`
 	Url string `gorm:"column:url"`
+}
+
+type repoIdRow struct {
+	RepoId string `gorm:"column:repo_id"`
 }
 
 type deployUrlRow struct {
@@ -537,6 +545,22 @@ func loadLeadTimeScope(projectName string, db dal.Dal, logger log.Logger) (*lead
 			for _, id := range reposByUrl[normalizeRepoUrl(row.RepoUrl)] {
 				candidates[id] = struct{}{}
 			}
+		}
+
+		// Renamed repos keep their old URL on deployments. Resolve those by the
+		// deployment commit instead, the same way batchFetchDeployments selects D.
+		var shippedByCommit []*repoIdRow
+		if err := db.All(&shippedByCommit,
+			dal.Select("DISTINCT rc.repo_id AS repo_id"),
+			dal.From("repo_commits rc"),
+			dal.Join("INNER JOIN cicd_deployment_commits dc ON dc.commit_sha = rc.commit_sha"),
+			dal.Where("dc.environment = ? AND dc.result = ? AND dc.cicd_scope_id IN (?)",
+				"PRODUCTION", devops.RESULT_SUCCESS, scope.ScopeIds),
+		); err != nil {
+			return nil, errors.Default.Wrap(err, "failed to load repos shipped by project scopes (by commit)")
+		}
+		for _, row := range shippedByCommit {
+			candidates[row.RepoId] = struct{}{}
 		}
 	}
 
