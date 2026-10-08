@@ -104,7 +104,7 @@
         "type": "mysql",
         "uid": "devlake-mysql-api"
       },
-      "description": "Successful production deploys whose webhook belongs to a project that does not map the deployed repository. A non-empty result almost always means a pipeline is still tagged with an old team after an ownership change, so the deploy (and the PRs it ships first) is credited to that old team. Fix the pipeline's team/webhook; rows disappear once no such deploy falls in the time range. Repos are matched on normalized URLs (case, trailing slash and '.git' ignored).",
+      "description": "Successful production deploys whose webhook belongs to a project that does not map the deployed repository. A non-empty result almost always means a pipeline is still tagged with an old team after an ownership change, so the deploy (and the PRs it ships first) is credited to that old team. Fix the pipeline's team/webhook; rows disappear once no such deploy falls in the time range. The repo_projects column lists the projects that currently map the repo; an empty value means the repo is mapped to no project or its URL does not resolve to a repo. Repos are matched on normalized URLs (case, trailing slash and '.git' ignored).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -167,7 +167,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT dc.finished_date AS \"time\", pm.project_name AS webhook_team, dc.repo_url, dc.cicd_scope_id, dc.commit_sha\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n      AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n  )\nORDER BY dc.finished_date DESC",
+          "rawSql": "SELECT dc.finished_date AS \"time\", pm.project_name AS webhook_team, (SELECT GROUP_CONCAT(DISTINCT rm.project_name ORDER BY rm.project_name SEPARATOR ', ') FROM project_mapping rm JOIN repos r ON r.id = rm.row_id WHERE rm.table = 'repos' AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url))))) AS repo_projects, dc.repo_url, dc.cicd_scope_id, dc.commit_sha\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n      AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n  )\nORDER BY dc.finished_date DESC",
           "refId": "A"
         }
       ],
