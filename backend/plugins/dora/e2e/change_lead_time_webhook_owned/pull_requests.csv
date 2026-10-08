@@ -4,4 +4,5 @@ prX2,repoX,a,John Doe,x3,2024-01-11 00:00:00,2024-01-12 00:00:00,shipped by B af
 prX3,repoX,a,John Doe,x9,2024-02-01 00:00:00,2024-02-02 00:00:00,never deployed,,
 prM1,repoM,a,John Doe,m1,2024-01-11 00:00:00,2024-01-12 00:00:00,monorepo first shipped by A,,
 prM2,repoM,a,John Doe,m3,2024-01-16 00:00:00,2024-01-17 00:00:00,monorepo first shipped by B,,
+prM3,repoM,a,John Doe,m9,2024-01-26 00:00:00,2024-01-27 00:00:00,"never deployed, repo mapped to both projects",,
 prR1,repoR,a,John Doe,r1,2024-01-21 00:00:00,2024-01-22 00:00:00,renamed repo shipped by A via stale url,,

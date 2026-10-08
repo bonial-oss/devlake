@@ -51,6 +51,11 @@ func TestCalculateCLTimeDataFlow(t *testing.T) {
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_requests.csv", &code.PullRequest{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/cicd_deployment_commits.csv", &devops.CicdDeploymentCommit{})
 	dataflowTester.ImportNullableCsvIntoTabler("./change_lead_time/commits_diffs.csv", &code.CommitsDiff{})
+	// change_lead_time/commit_parents.csv derives the graph from commits_diffs.csv:
+	// the PR merge commits between two consecutive deployments form a chain between
+	// them. pr_merge_commit0 and pr_merge_commit5 have no edges on purpose: their
+	// commits_diffs rows have an empty old_commit_sha and the golden files expect
+	// them never deployed. "Completing" the graph would change the goldens.
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/repo_commits.csv", &code.RepoCommit{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/commit_parents.csv", &code.CommitParent{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/accounts.csv", &crossdomain.Account{})
@@ -88,6 +93,11 @@ func TestCalculateCLTimeDataFlowBotFilteringDisabled(t *testing.T) {
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_requests.csv", &code.PullRequest{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/cicd_deployment_commits.csv", &devops.CicdDeploymentCommit{})
 	dataflowTester.ImportNullableCsvIntoTabler("./change_lead_time/commits_diffs.csv", &code.CommitsDiff{})
+	// change_lead_time/commit_parents.csv derives the graph from commits_diffs.csv:
+	// the PR merge commits between two consecutive deployments form a chain between
+	// them. pr_merge_commit0 and pr_merge_commit5 have no edges on purpose: their
+	// commits_diffs rows have an empty old_commit_sha and the golden files expect
+	// them never deployed. "Completing" the graph would change the goldens.
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/repo_commits.csv", &code.RepoCommit{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/commit_parents.csv", &code.CommitParent{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/accounts.csv", &crossdomain.Account{})
