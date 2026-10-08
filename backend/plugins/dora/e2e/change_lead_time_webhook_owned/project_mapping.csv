@@ -1,0 +1,6 @@
+project_name,table,row_id
+projectA,cicd_scopes,scopeA
+projectA,repos,repoM
+projectB,cicd_scopes,scopeB
+projectB,repos,repoX
+projectB,repos,repoM

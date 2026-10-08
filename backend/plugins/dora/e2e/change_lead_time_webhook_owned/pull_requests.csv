@@ -1,0 +1,6 @@
+id,base_repo_id,author_id,author_name,merge_commit_sha,created_date,merged_date,_raw_data_remark,base_commit_sha,head_commit_sha
+prX1,repoX,a,John Doe,x1,2024-01-01 00:00:00,2024-01-02 00:00:00,shipped by A before the move,,
+prX2,repoX,a,John Doe,x3,2024-01-11 00:00:00,2024-01-12 00:00:00,shipped by B after the move,,
+prX3,repoX,a,John Doe,x9,2024-02-01 00:00:00,2024-02-02 00:00:00,never deployed,,
+prM1,repoM,a,John Doe,m1,2024-01-11 00:00:00,2024-01-12 00:00:00,monorepo first shipped by A,,
+prM2,repoM,a,John Doe,m3,2024-01-16 00:00:00,2024-01-17 00:00:00,monorepo first shipped by B,,
