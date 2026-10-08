@@ -52,6 +52,8 @@ func TestCalculateCLTimeDataFlow(t *testing.T) {
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_requests.csv", &code.PullRequest{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/cicd_deployment_commits.csv", &devops.CicdDeploymentCommit{})
 	dataflowTester.ImportNullableCsvIntoTabler("./change_lead_time/commits_diffs.csv", &code.CommitsDiff{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/repo_commits.csv", &code.RepoCommit{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/commit_parents.csv", &code.CommitParent{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_comments.csv", &code.PullRequestComment{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_commits.csv", &code.PullRequestCommit{})
 	// bot1 comments on pr1 before the first human review; it must not be counted as the first review
@@ -88,6 +90,9 @@ func TestCalculateCLTimeDataFlowBotFilteringDisabled(t *testing.T) {
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_requests.csv", &code.PullRequest{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/cicd_deployment_commits.csv", &devops.CicdDeploymentCommit{})
 	dataflowTester.ImportNullableCsvIntoTabler("./change_lead_time/commits_diffs.csv", &code.CommitsDiff{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/repo_commits.csv", &code.RepoCommit{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/commit_parents.csv", &code.CommitParent{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/accounts.csv", &crossdomain.Account{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_comments.csv", &code.PullRequestComment{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_commits.csv", &code.PullRequestCommit{})
 
@@ -120,6 +125,9 @@ func TestCalculateCLTimeWithPrHeadRefPatternDataFlow(t *testing.T) {
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_requests.csv", &code.PullRequest{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/cicd_deployment_commits.csv", &devops.CicdDeploymentCommit{})
 	dataflowTester.ImportNullableCsvIntoTabler("./change_lead_time/commits_diffs.csv", &code.CommitsDiff{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/repo_commits.csv", &code.RepoCommit{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/commit_parents.csv", &code.CommitParent{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/accounts.csv", &crossdomain.Account{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_comments.csv", &code.PullRequestComment{})
 	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_commits.csv", &code.PullRequestCommit{})
 
