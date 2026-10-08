@@ -33,7 +33,8 @@ import (
 // whose cicd scope first shipped each PR: A keeps what it shipped before the move,
 // B gets only what its own scope shipped, and nothing is counted twice. A
 // monorepo mapped to both projects splits the same way. A deployment on a scope
-// mapped to no project is ignored.
+// mapped to no project is ignored. A repo mapped to no project is still credited to the scope that
+// shipped it; its never-deployed PRs appear nowhere.
 func TestCalculateCLTimeWebhookOwnedDataFlow(t *testing.T) {
 	var plugin impl.Dora
 	dataflowTester := e2ehelper.NewDataFlowTester(t, "dora", plugin)
