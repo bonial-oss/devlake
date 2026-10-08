@@ -33,7 +33,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "devlake-postgres-api"
       },
-      "description": "Number of distinct repositories that had at least one successful production deploy reported to a webhook whose project does not map that repository, in the selected time range. Anything above 0 means a pipeline is still tagged with an old team: fix the pipeline's team/webhook and the count drops to 0 on the next collection.",
+      "description": "Number of distinct repositories that had at least one successful production deploy reported to a webhook whose project does not map that repository, in the selected time range. Anything above 0 means a pipeline is still tagged with an old team: fix the pipeline's team/webhook and the count drops to 0 on the next collection. Repos are matched on normalized URLs (case, trailing slash and '.git' ignored).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -92,7 +92,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(DISTINCT t.repo_url) AS repos_affected\nFROM (\n  SELECT dc.repo_url\n  FROM cicd_deployment_commits dc\n  JOIN project_mapping pm ON pm.\"table\" = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\n  WHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n    AND $__timeFilter(dc.finished_date)\n    AND NOT EXISTS (\n      SELECT 1 FROM project_mapping rm\n      JOIN repos r ON r.id = rm.row_id\n      WHERE rm.\"table\" = 'repos' AND rm.project_name = pm.project_name\n        AND LOWER(dc.repo_url) LIKE CONCAT(LOWER(r.url), '%')\n    )\n) t",
+          "rawSql": "SELECT COUNT(DISTINCT t.repo_url) AS repos_affected\nFROM (\n  SELECT dc.repo_url\n  FROM cicd_deployment_commits dc\n  JOIN project_mapping pm ON pm.\"table\" = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\n  WHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n    AND $__timeFilter(dc.finished_date)\n    AND NOT EXISTS (\n      SELECT 1 FROM project_mapping rm\n      JOIN repos r ON r.id = rm.row_id\n      WHERE rm.\"table\" = 'repos' AND rm.project_name = pm.project_name\n        AND LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM dc.repo_url))) = LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM r.url)))\n    )\n) t",
           "refId": "A"
         }
       ],
@@ -104,7 +104,7 @@
         "type": "grafana-postgresql-datasource",
         "uid": "devlake-postgres-api"
       },
-      "description": "Successful production deploys whose webhook belongs to a project that does not map the deployed repository. A non-empty result almost always means a pipeline is still tagged with an old team after an ownership change, so the deploy (and the PRs it ships first) is credited to that old team. Fix the pipeline's team/webhook; rows disappear once no such deploy falls in the time range. Repo matching is a URL prefix comparison, so a renamed repo or a URL that only differs by a trailing '.git' can also show up here.",
+      "description": "Successful production deploys whose webhook belongs to a project that does not map the deployed repository. A non-empty result almost always means a pipeline is still tagged with an old team after an ownership change, so the deploy (and the PRs it ships first) is credited to that old team. Fix the pipeline's team/webhook; rows disappear once no such deploy falls in the time range. Repos are matched on normalized URLs (case, trailing slash and '.git' ignored).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -167,7 +167,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT dc.finished_date AS \"time\", pm.project_name AS webhook_team, dc.repo_url, dc.cicd_scope_id, dc.commit_sha\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.\"table\" = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.\"table\" = 'repos' AND rm.project_name = pm.project_name\n      AND LOWER(dc.repo_url) LIKE CONCAT(LOWER(r.url), '%')\n  )\nORDER BY dc.finished_date DESC",
+          "rawSql": "SELECT dc.finished_date AS \"time\", pm.project_name AS webhook_team, dc.repo_url, dc.cicd_scope_id, dc.commit_sha\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.\"table\" = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.\"table\" = 'repos' AND rm.project_name = pm.project_name\n      AND LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM dc.repo_url))) = LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM r.url)))\n  )\nORDER BY dc.finished_date DESC",
           "refId": "A"
         }
       ],
