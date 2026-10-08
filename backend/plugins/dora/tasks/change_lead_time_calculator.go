@@ -45,6 +45,10 @@ var CalculateChangeLeadTimeMeta = plugin.SubTaskMeta{
 }
 
 // CalculateChangeLeadTime calculates change lead time for a project.
+//
+// PRs are credited to the project whose webhook first shipped them, not to the
+// project that currently maps the repo; never-deployed PRs stay with the project
+// that maps the repo, without deploy fields. See decidePrEmit and loadLeadTimeScope.
 func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	// Get instances of the DAL and logger
 	db := taskCtx.GetDal()
@@ -86,7 +90,7 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	startTime := time.Now()
 	logger.Info("Batch fetching data for project: %s", data.Options.ProjectName)
 
-	firstCommitsMap, err := batchFetchFirstCommits(data.Options.ProjectName, db)
+	firstCommitsMap, err := batchFetchFirstCommits(scope.CandidateRepoIds, db)
 	if err != nil {
 		return errors.Default.Wrap(err, "failed to batch fetch first commits")
 	}
@@ -100,7 +104,7 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 
 	reviewStartTime := time.Now()
-	firstReviewsMap, err := batchFetchFirstReviews(data.Options.ProjectName, db, botAccountIds)
+	firstReviewsMap, err := batchFetchFirstReviews(scope.CandidateRepoIds, db, botAccountIds)
 	if err != nil {
 		return errors.Default.Wrap(err, "failed to batch fetch first reviews")
 	}
@@ -114,12 +118,16 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	logger.Info("Fetched %d deployments in %v", len(deploymentsMap), time.Since(deploymentStartTime))
 	logger.Info("Total batch fetch time: %v", time.Since(startTime))
 
-	// Get pull requests by repo project_name
+	// Merged pull requests of every candidate repo; the converter decides per PR
+	// whether this project emits it.
+	if len(scope.CandidateRepoIds) == 0 {
+		logger.Info("project %s maps no repos and its webhooks shipped none; nothing to calculate", scope.ProjectName)
+		return nil
+	}
 	var clauses = []dal.Clause{
-		dal.Select("pr.id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date"),
+		dal.Select("pr.id, pr.base_repo_id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date"),
 		dal.From("pull_requests pr"),
-		dal.Join(`LEFT JOIN project_mapping pm ON (pm.row_id = pr.base_repo_id)`),
-		dal.Where("pr.merged_date IS NOT NULL AND pm.project_name = ? AND pm.table = 'repos'", data.Options.ProjectName),
+		dal.Where("pr.merged_date IS NOT NULL AND pr.base_repo_id IN (?)", scope.CandidateRepoIds),
 	}
 	cursor, err := db.Cursor(clauses...)
 	if err != nil {
@@ -170,11 +178,20 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 			projectPrMetric.PrCreatedDate = &pr.CreatedDate
 			projectPrMetric.PrMergedDate = pr.MergedDate
 
-			// Get the deployment for the PR from batch-fetched map
+			// Which deployment first shipped this PR, on any team webhook, and
+			// does it belong to this project?
 			deployment := deploymentsMap[pr.MergeCommitSha]
-
-			// Calculate PR deploy time
-			if deployment != nil && deployment.FinishedDate != nil {
+			decision := decidePrEmit(
+				deployment != nil,
+				deployment != nil && scope.OwnsScope(deployment.CicdScopeId),
+				scope.OwnsRepo(pr.BaseRepoId),
+			)
+			if !decision.Emit {
+				// Shipped by another team's webhook (that team emits it), or a
+				// never-deployed PR of a repo this project no longer owns.
+				return nil, nil
+			}
+			if decision.Deployed && deployment.FinishedDate != nil {
 				projectPrMetric.PrDeployTime = computeTimeSpan(pr.MergedDate, deployment.FinishedDate)
 				projectPrMetric.DeploymentCommitId = deployment.Id
 				projectPrMetric.PrDeployedDate = deployment.FinishedDate
@@ -289,17 +306,18 @@ type commitParentEdge struct {
 	ParentCommitSha string `gorm:"column:parent_commit_sha"`
 }
 
-// batchFetchFirstCommits retrieves the first commit for all pull requests in the given project.
+// batchFetchFirstCommits retrieves the first commit for all pull requests of the given repos.
 // Returns a map indexed by PR ID for O(1) lookup performance.
 //
 // The query uses a subquery to find the minimum commit_authored_date for each PR,
 // then joins back to get the full commit record. This is more efficient than
 // fetching all commits and filtering in memory.
-func batchFetchFirstCommits(projectName string, db dal.Dal) (map[string]*code.PullRequestCommit, errors.Error) {
+func batchFetchFirstCommits(repoIds []string, db dal.Dal) (map[string]*code.PullRequestCommit, errors.Error) {
+	commitMap := map[string]*code.PullRequestCommit{}
+	if len(repoIds) == 0 {
+		return commitMap, nil
+	}
 	var results []*code.PullRequestCommit
-
-	// Use a subquery to find the earliest commit for each PR, then join to get full commit details.
-	// This avoids scanning all commits and is optimized by the database engine.
 	err := db.All(
 		&results,
 		dal.Select("prc.*"),
@@ -311,33 +329,31 @@ func batchFetchFirstCommits(projectName string, db dal.Dal) (map[string]*code.Pu
 		) first_commits ON prc.pull_request_id = first_commits.pull_request_id
 		AND prc.commit_authored_date = first_commits.min_date`),
 		dal.Join("INNER JOIN pull_requests pr ON pr.id = prc.pull_request_id"),
-		dal.Join("LEFT JOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.table = 'repos'"),
-		dal.Where("pm.project_name = ?", projectName),
+		dal.Where("pr.base_repo_id IN (?)", repoIds),
 		dal.Orderby("prc.pull_request_id, prc.commit_authored_date ASC"),
 	)
-
 	if err != nil {
 		return nil, errors.Default.Wrap(err, "failed to batch fetch first commits")
 	}
-
-	// Build the map for O(1) lookup by PR ID
-	commitMap := make(map[string]*code.PullRequestCommit, len(results))
 	for _, commit := range results {
 		// Only keep the first commit if multiple commits have the same timestamp
 		if _, exists := commitMap[commit.PullRequestId]; !exists {
 			commitMap[commit.PullRequestId] = commit
 		}
 	}
-
 	return commitMap, nil
 }
 
-// batchFetchFirstReviews retrieves the first review comment for all pull requests in the given project.
+// batchFetchFirstReviews retrieves the first review comment for all pull requests of the given repos.
 // Returns a map indexed by PR ID for O(1) lookup performance.
 //
 // The query uses a subquery to find the minimum created_date for each PR (excluding the PR author
 // and any bot accounts), then joins back to get the full comment record.
-func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []string) (map[string]*code.PullRequestComment, errors.Error) {
+func batchFetchFirstReviews(repoIds []string, db dal.Dal, botAccountIds []string) (map[string]*code.PullRequestComment, errors.Error) {
+	reviewMap := map[string]*code.PullRequestComment{}
+	if len(repoIds) == 0 {
+		return reviewMap, nil
+	}
 	var results []*code.PullRequestComment
 
 	// Exclude bots inside the MIN() subquery (so a bot can't win the minimum) and
@@ -364,9 +380,8 @@ func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []stri
 		) first_reviews ON prc.pull_request_id = first_reviews.pull_request_id
 		AND prc.created_date = first_reviews.min_date`, subParams...),
 		dal.Join("INNER JOIN pull_requests pr ON pr.id = prc.pull_request_id"),
-		dal.Join("LEFT JOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.table = 'repos'"),
-		dal.Where("pm.project_name = ? AND (pr.author_id IS NULL OR pr.author_id = '' OR prc.account_id != pr.author_id)"+botFilterOuter,
-			append([]interface{}{projectName}, outerParams...)...),
+		dal.Where("pr.base_repo_id IN (?) AND (pr.author_id IS NULL OR pr.author_id = '' OR prc.account_id != pr.author_id)"+botFilterOuter,
+			append([]interface{}{repoIds}, outerParams...)...),
 		dal.Orderby("prc.pull_request_id, prc.created_date ASC"),
 	)
 
@@ -375,7 +390,6 @@ func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []stri
 	}
 
 	// Build the map for O(1) lookup by PR ID
-	reviewMap := make(map[string]*code.PullRequestComment, len(results))
 	for _, review := range results {
 		// Only keep the first review if multiple reviews have the same timestamp
 		if _, exists := reviewMap[review.PullRequestId]; !exists {
