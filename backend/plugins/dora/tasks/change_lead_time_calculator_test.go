@@ -170,19 +170,19 @@ func TestNormalizeRepoUrl(t *testing.T) {
 }
 
 func TestDecidePrEmit(t *testing.T) {
-	// shipped by this project's webhook -> deployed row
+	// shipped on this project's scope -> deployed row
 	assert.Equal(t, prEmitDecision{Emit: true, Deployed: true}, decidePrEmit(true, true, true))
 	assert.Equal(t, prEmitDecision{Emit: true, Deployed: true}, decidePrEmit(true, true, false))
-	// shipped by another team's webhook -> that team emits it, not us
+	// shipped on a scope mapped to another project -> that project emits it, not us
 	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(true, false, true))
 	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(true, false, false))
-	// never shipped by a team webhook -> never-deployed row only if we own the repo
+	// never shipped on a mapped scope -> never-deployed row only if we map the repo
 	assert.Equal(t, prEmitDecision{Emit: true, Deployed: false}, decidePrEmit(false, false, true))
 	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(false, false, false))
 }
 
-// An older deployment on another team's webhook already shipped the history,
-// so the first deployment on this team's webhook only claims the delta.
+// An older deployment on another scope already shipped the history,
+// so the first deployment on this project's scope only claims the delta.
 func TestAttributeCommits_OlderScopeClaimsHistory(t *testing.T) {
 	parents := map[string][]string{
 		"x2": {"x1"},

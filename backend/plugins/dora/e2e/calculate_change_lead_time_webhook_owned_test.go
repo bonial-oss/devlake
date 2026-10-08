@@ -29,9 +29,9 @@ import (
 	"github.com/apache/incubator-devlake/plugins/dora/tasks"
 )
 
-// Repo X moved from project A to project B. Lead time must stay with the team
-// whose webhook first shipped each PR: A keeps what it shipped before the move,
-// B gets only what its own webhook shipped, and nothing is counted twice. A
+// Repo X moved from project A to project B. Lead time must stay with the project
+// whose cicd scope first shipped each PR: A keeps what it shipped before the move,
+// B gets only what its own scope shipped, and nothing is counted twice. A
 // monorepo mapped to both projects splits the same way. A deployment on a scope
 // mapped to no project is ignored.
 func TestCalculateCLTimeWebhookOwnedDataFlow(t *testing.T) {
@@ -54,7 +54,7 @@ func TestCalculateCLTimeWebhookOwnedDataFlow(t *testing.T) {
 
 	dataflowTester.FlushTabler(&crossdomain.ProjectPrMetric{})
 
-	// Old owner first: it keeps the PRs its webhook shipped, including repo X
+	// Project A first: it keeps the PRs its scope shipped, including repo X
 	// which is no longer mapped to it.
 	dataflowTester.Subtask(tasks.CalculateChangeLeadTimeMeta, &tasks.DoraTaskData{
 		Options: &tasks.DoraOptions{ProjectName: "projectA"},
@@ -64,7 +64,7 @@ func TestCalculateCLTimeWebhookOwnedDataFlow(t *testing.T) {
 		IgnoreTypes: []interface{}{common.NoPKModel{}},
 	})
 
-	// New owner: only what its own webhook shipped, plus never-deployed PRs of
+	// Project B: only what its own scope shipped, plus never-deployed PRs of
 	// repos it maps. It must leave project A's rows alone.
 	dataflowTester.Subtask(tasks.CalculateChangeLeadTimeMeta, &tasks.DoraTaskData{
 		Options: &tasks.DoraOptions{ProjectName: "projectB"},

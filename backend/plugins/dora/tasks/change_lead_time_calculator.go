@@ -47,7 +47,7 @@ var CalculateChangeLeadTimeMeta = plugin.SubTaskMeta{
 
 // CalculateChangeLeadTime calculates change lead time for a project.
 //
-// PRs are credited to the project whose webhook first shipped them, not to the
+// PRs are credited to the project whose cicd scope first shipped them, not to the
 // project that currently maps the repo; never-deployed PRs stay with the project
 // that maps the repo, without deploy fields. See decidePrEmit and loadLeadTimeScope.
 func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
@@ -87,7 +87,7 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	logger.Info("Lead time scope for %s: %d scopes, %d owned repos, %d candidate repos, %d deployment urls",
 		scope.ProjectName, len(scope.ScopeIds), len(scope.OwnedRepoIds), len(scope.CandidateRepoIds), len(scope.CandidateDeployUrls))
 	if len(scope.CandidateRepoIds) == 0 {
-		logger.Info("project %s maps no repos and its webhooks shipped none; nothing to calculate", scope.ProjectName)
+		logger.Info("project %s maps no repos and its scopes shipped none; nothing to calculate", scope.ProjectName)
 		return nil
 	}
 
@@ -179,8 +179,8 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 			projectPrMetric.PrCreatedDate = &pr.CreatedDate
 			projectPrMetric.PrMergedDate = pr.MergedDate
 
-			// Which deployment first shipped this PR, on any team webhook, and
-			// does it belong to this project?
+			// Which deployment first shipped this PR, on any mapped cicd scope, and
+			// does that scope belong to this project?
 			deployment := deploymentsMap[pr.MergeCommitSha]
 			decision := decidePrEmit(
 				deployment != nil,
@@ -188,8 +188,8 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 				scope.OwnsRepo(pr.BaseRepoId),
 			)
 			if !decision.Emit {
-				// Shipped by another team's webhook (that team emits it), or a
-				// never-deployed PR of a repo this project no longer owns.
+				// Shipped on a scope mapped to another project (that project emits it),
+				// or a never-deployed PR of a repo this project no longer maps.
 				return nil, nil
 			}
 			if decision.Deployed && deployment.FinishedDate != nil {
@@ -243,9 +243,9 @@ type prEmitDecision struct {
 	Deployed bool
 }
 
-// decidePrEmit applies the ownership rule for lead time. A PR shipped by a team
-// webhook belongs to that team only; a PR no team webhook has shipped yet stays
-// with the project that maps its repo, without deploy fields.
+// decidePrEmit applies the attribution rule for lead time. A PR shipped on a cicd
+// scope belongs only to the project that maps that scope; a PR no mapped scope
+// has shipped yet stays with the project that maps its repo, without deploy fields.
 func decidePrEmit(shipped, projectOwnsShipScope, projectOwnsRepo bool) prEmitDecision {
 	if shipped {
 		return prEmitDecision{Emit: projectOwnsShipScope, Deployed: projectOwnsShipScope}
@@ -403,11 +403,11 @@ func batchFetchFirstReviews(repoIds []string, db dal.Dal, botAccountIds []string
 
 // leadTimeScope is what one project's lead-time calculation looks at.
 //
-// S_P (ScopeIds) is the project's own webhook(s). R_P (OwnedRepoIds) are the
-// repos currently mapped to the project. R_ship(P) are repos the project's
-// webhook has production-deployed, whether or not they are still mapped to it;
-// that is what lets a team keep the PRs it shipped after a repo moves to
-// another owner. R_ship is resolved by deployment URL or by commit membership
+// S_P (ScopeIds) is the cicd scopes mapped to the project. R_P (OwnedRepoIds) are the
+// repos currently mapped to the project. R_ship(P) are repos deployed to
+// production on the project's scopes, whether or not they are still mapped to it;
+// that is what lets a project keep the PRs it shipped after a repo moves to
+// another project. R_ship is resolved by deployment URL or by commit membership
 // (repo_commits), the latter covering renamed repos whose deployments keep the
 // old URL. The commit join is a hash join of the project's scope deployments
 // against repo_commits, which has no index on commit_sha alone, so it only runs
@@ -533,7 +533,7 @@ func loadLeadTimeScope(projectName string, db dal.Dal, logger log.Logger) (*lead
 		return nil, errors.Default.Wrap(err, "failed to load deployment repo urls")
 	}
 
-	// R_ship(P): repos deployed on the project's own webhook(s).
+	// R_ship(P): repos deployed on the project's own cicd scopes.
 	if len(scope.ScopeIds) > 0 {
 		var shipped []*deployUrlRow
 		if err := db.All(&shipped,
@@ -595,22 +595,22 @@ func loadLeadTimeScope(projectName string, db dal.Dal, logger log.Logger) (*lead
 }
 
 // batchFetchDeployments maps each commit of the project's candidate repos to the
-// EARLIEST successful production deployment, on ANY mapped webhook, whose commit
+// EARLIEST successful production deployment, on ANY mapped cicd scope, whose commit
 // descends from it: the deployment that first shipped that commit. The caller
 // looks up a PR by its merge_commit_sha and then decides, with decidePrEmit,
 // whether the first-ship deployment belongs to this project.
 //
-// Loading every mapped webhook's deployments of a repo (not just this project's)
-// is what stops an ownership change from back-linking the repo's whole history
-// onto the new owner's first deployment: the old owner's deployments already
-// claim that history and prune the walk. Deployments on scopes mapped to no
-// project (retired webhooks) are ignored; they belong to no team.
+// Loading the deployments of a repo from every mapped scope (not just this
+// project's) is what stops remapping a repo from back-linking its whole history
+// onto the new project's first deployment: the previous project's deployments
+// already claim that history and prune the walk. Deployments on scopes mapped
+// to no project are ignored; they are credited to no project.
 //
 // Deployments are selected by repo_url or by commit membership in repo_commits
-// of the candidate repos, never by which project owns the webhook. That is two
+// of the candidate repos, never by which project maps the scope. That is two
 // plain portable queries, de-duplicated and ordered in Go, instead of an OR over
 // an IN-subquery that neither MySQL nor PostgreSQL can turn into a semi-join.
-// Because selection ignores webhook ownership, every project that considers a
+// Because selection ignores which project maps the scope, every project that considers a
 // repo sees the same deployments and the same commit
 // graph for it and agrees on which deployment first shipped a commit. This
 // assumes a commit SHA belongs to one repo and a cicd scope is mapped to one
@@ -624,7 +624,7 @@ func batchFetchDeployments(scope *leadTimeScope, db dal.Dal) (map[string]*devops
 		return map[string]*devops.CicdDeploymentCommit{}, nil
 	}
 
-	// 1. Successful production deployments on mapped webhooks that match a
+	// 1. Successful production deployments on mapped scopes that match a
 	//    candidate repo by URL or by commit membership, earliest first.
 	base := []dal.Clause{
 		dal.Select("dc.*"),
