@@ -168,3 +168,33 @@ func TestNormalizeRepoUrl(t *testing.T) {
 		assert.Equal(t, want, normalizeRepoUrl(in), "input %q", in)
 	}
 }
+
+func TestDecidePrEmit(t *testing.T) {
+	// shipped by this project's webhook -> deployed row
+	assert.Equal(t, prEmitDecision{Emit: true, Deployed: true}, decidePrEmit(true, true, true))
+	assert.Equal(t, prEmitDecision{Emit: true, Deployed: true}, decidePrEmit(true, true, false))
+	// shipped by another team's webhook -> that team emits it, not us
+	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(true, false, true))
+	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(true, false, false))
+	// never shipped by a team webhook -> never-deployed row only if we own the repo
+	assert.Equal(t, prEmitDecision{Emit: true, Deployed: false}, decidePrEmit(false, false, true))
+	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(false, false, false))
+}
+
+// An older deployment on another team's webhook already shipped the history,
+// so the first deployment on this team's webhook only claims the delta.
+func TestAttributeCommits_OlderScopeClaimsHistory(t *testing.T) {
+	parents := map[string][]string{
+		"x2": {"x1"},
+		"x3": {"x2"},
+		"x4": {"x3"},
+	}
+	older := &devops.CicdDeploymentCommit{CommitSha: "x2", CicdScopeId: "scopeA"}
+	newer := &devops.CicdDeploymentCommit{CommitSha: "x4", CicdScopeId: "scopeB"}
+	got := attributeCommitsToDeployments([]*devops.CicdDeploymentCommit{older, newer}, parents)
+
+	assert.Same(t, older, got["x1"])
+	assert.Same(t, older, got["x2"])
+	assert.Same(t, newer, got["x3"])
+	assert.Same(t, newer, got["x4"])
+}

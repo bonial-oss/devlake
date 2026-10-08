@@ -211,6 +211,23 @@ func computeTimeSpan(start, end *time.Time) *int64 {
 	return &minutes
 }
 
+// prEmitDecision says whether the project being calculated writes a
+// project_pr_metrics row for a PR, and whether that row carries deploy fields.
+type prEmitDecision struct {
+	Emit     bool
+	Deployed bool
+}
+
+// decidePrEmit applies the ownership rule for lead time. A PR shipped by a team
+// webhook belongs to that team only; a PR no team webhook has shipped yet stays
+// with the project that maps its repo, without deploy fields.
+func decidePrEmit(shipped, projectOwnsShipScope, projectOwnsRepo bool) prEmitDecision {
+	if shipped {
+		return prEmitDecision{Emit: projectOwnsShipScope, Deployed: projectOwnsShipScope}
+	}
+	return prEmitDecision{Emit: projectOwnsRepo}
+}
+
 // normalizeRepoUrl makes a deployment's repo_url comparable with repos.url.
 // Webhook deployments carry the clone URL (".git" suffix, sometimes a trailing
 // slash, arbitrary case) and an empty repo_id, so this is the only join key.
