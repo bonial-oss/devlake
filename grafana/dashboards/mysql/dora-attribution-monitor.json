@@ -92,7 +92,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT COUNT(DISTINCT t.repo_url) AS repos_affected\nFROM (\n  SELECT dc.repo_url\n  FROM cicd_deployment_commits dc\n  JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\n  WHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n    AND $__timeFilter(dc.finished_date)\n    AND NOT EXISTS (\n      SELECT 1 FROM project_mapping rm\n      JOIN repos r ON r.id = rm.row_id\n      WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n        AND LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM dc.repo_url))) = LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM r.url)))\n    )\n) t",
+          "rawSql": "SELECT COUNT(DISTINCT TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(t.repo_url))))) AS repos_affected\nFROM (\n  SELECT dc.repo_url\n  FROM cicd_deployment_commits dc\n  JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\n  WHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n    AND $__timeFilter(dc.finished_date)\n    AND NOT EXISTS (\n      SELECT 1 FROM project_mapping rm\n      JOIN repos r ON r.id = rm.row_id\n      WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n        AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n    )\n) t",
           "refId": "A"
         }
       ],
@@ -167,7 +167,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT dc.finished_date AS \"time\", pm.project_name AS webhook_team, dc.repo_url, dc.cicd_scope_id, dc.commit_sha\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n      AND LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM dc.repo_url))) = LOWER(TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM r.url)))\n  )\nORDER BY dc.finished_date DESC",
+          "rawSql": "SELECT dc.finished_date AS \"time\", pm.project_name AS webhook_team, dc.repo_url, dc.cicd_scope_id, dc.commit_sha\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n      AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n  )\nORDER BY dc.finished_date DESC",
           "refId": "A"
         }
       ],
