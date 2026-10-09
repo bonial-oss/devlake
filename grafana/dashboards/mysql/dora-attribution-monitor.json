@@ -1,0 +1,446 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "devlake-mysql-api"
+      },
+      "description": "Number of distinct repositories that had at least one successful production deploy reported on a cicd scope whose project does not map that repository, in the selected time range. Anything above 0 usually means a deployment source is still reporting under a project that no longer maps the repo; fix the source's project mapping and the count drops to 0 on the next collection. Repos are matched on normalized URLs (case, trailing slash and '.git' ignored).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "mysql",
+            "uid": "devlake-mysql-api"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(DISTINCT TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(t.repo_url))))) AS repos_affected\nFROM (\n  SELECT dc.repo_url\n  FROM cicd_deployment_commits dc\n  JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\n  WHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n    AND $__timeFilter(dc.finished_date)\n    AND NOT EXISTS (\n      SELECT 1 FROM project_mapping rm\n      JOIN repos r ON r.id = rm.row_id\n      WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n        AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n    )\n) t",
+          "refId": "A"
+        }
+      ],
+      "title": "Repos affected (range)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "devlake-mysql-api"
+      },
+      "description": "Deployments reported on a cicd scope whose project does not currently map the deployment's repo. Usually a deployment source still reporting under a project that no longer maps the repo; the deployment and the PRs it first shipped are credited to that project. Fix the source's project mapping; rows disappear once no such deploy falls in the time range. The repo_projects column lists the projects that currently map the repo; an empty value means the repo is mapped to no project or its URL does not resolve to a repo. Repos are matched on normalized URLs (case, trailing slash and '.git' ignored).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "No production deploy on a non-owning webhook in this range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 18,
+        "x": 6,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "fields": "",
+          "reducer": [
+            "count"
+          ],
+          "show": true
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "time"
+          }
+        ]
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "mysql",
+            "uid": "devlake-mysql-api"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT dc.finished_date AS \"time\", pm.project_name AS deployment_project, (SELECT GROUP_CONCAT(DISTINCT rm.project_name ORDER BY rm.project_name SEPARATOR ', ') FROM project_mapping rm JOIN repos r ON r.id = rm.row_id WHERE rm.table = 'repos' AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url))))) AS repo_projects, dc.repo_url, dc.cicd_scope_id, dc.commit_sha\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n      AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n  )\nORDER BY dc.finished_date DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "Production deploys on a webhook whose project does not map the repo",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "devlake-mysql-api"
+      },
+      "description": "Deployed PRs divided by distinct production deployments, per week, across all projects. Values above 2 (red band) mean batches of PRs are being attached to single deploys: typically the first deployment of a repo on a scope back-linking its whole history, or a repo that releases rarely. Check project_pr_metrics for the deployment_commit_id with the most PRs in that week.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "PRs per deploy",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          },
+          "decimals": 2,
+          "mappings": [],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "mysql",
+            "uid": "devlake-mysql-api"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroup(ppm.pr_deployed_date, '7d') AS \"time\",\n       COUNT(*) / NULLIF(COUNT(DISTINCT ppm.deployment_commit_id), 0) AS prs_per_deploy\nFROM project_pr_metrics ppm\nWHERE ppm.pr_deployed_date IS NOT NULL AND $__timeFilter(ppm.pr_deployed_date)\nGROUP BY 1 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "title": "PRs per production deploy, weekly",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "devlake-mysql-api"
+      },
+      "description": "Successful production deployments in the range that were reported on a cicd scope whose project does not map the deployment's repo.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 6
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {},
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "mysql",
+            "uid": "devlake-mysql-api"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(*) AS affected_deployments\nFROM cicd_deployment_commits dc\nJOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\nWHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n  AND $__timeFilter(dc.finished_date)\n  AND NOT EXISTS (\n    SELECT 1 FROM project_mapping rm\n    JOIN repos r ON r.id = rm.row_id\n    WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n      AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n  )",
+          "refId": "A"
+        }
+      ],
+      "title": "Affected deployments (range)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "mysql",
+        "uid": "devlake-mysql-api"
+      },
+      "description": "One row per repo whose deployments were reported on a cicd scope of a project that does not map it. deployment_projects/deployment_scopes: where the deployments were reported; repo_projects: who maps the repo today (empty = nobody, or the URL does not resolve to a repo).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "noValue": "No production deploy on a non-owning webhook in this range",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "fields": "",
+          "reducer": [
+            "count"
+          ],
+          "show": true
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "deployments"
+          }
+        ]
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": {
+            "type": "mysql",
+            "uid": "devlake-mysql-api"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT t.repo_url_norm AS repo_url, GROUP_CONCAT(DISTINCT t.project_name ORDER BY t.project_name SEPARATOR ', ') AS deployment_projects, GROUP_CONCAT(DISTINCT t.cicd_scope_id ORDER BY t.cicd_scope_id SEPARATOR ', ') AS deployment_scopes, (SELECT GROUP_CONCAT(DISTINCT rm.project_name ORDER BY rm.project_name SEPARATOR ', ') FROM project_mapping rm JOIN repos r ON r.id = rm.row_id WHERE rm.table = 'repos' AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url)))) = t.repo_url_norm) AS repo_projects, COUNT(*) AS deployments, MIN(t.finished_date) AS first_deployment, MAX(t.finished_date) AS last_deployment\nFROM (\n  SELECT dc.finished_date, TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) AS repo_url_norm, pm.project_name, dc.cicd_scope_id\n  FROM cicd_deployment_commits dc\n  JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id\n  WHERE dc.environment = 'PRODUCTION' AND dc.result = 'SUCCESS'\n    AND $__timeFilter(dc.finished_date)\n    AND NOT EXISTS (\n      SELECT 1 FROM project_mapping rm\n      JOIN repos r ON r.id = rm.row_id\n      WHERE rm.table = 'repos' AND rm.project_name = pm.project_name\n        AND TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(dc.repo_url)))) = TRIM(TRAILING '/' FROM TRIM(TRAILING '.git' FROM TRIM(TRAILING '/' FROM LOWER(r.url))))\n    )\n) t\nGROUP BY t.repo_url_norm\nORDER BY deployments DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "Affected repos (range)",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "Engineering Leads Dashboard",
+    "DORA"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timeRangeUpdatedDuringEditOrView": false,
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "DORA — Attribution Monitor",
+  "uid": "dora-attribution-monitor",
+  "version": 1,
+  "weekStart": ""
+}

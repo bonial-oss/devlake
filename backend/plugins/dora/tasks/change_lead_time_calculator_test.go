@@ -154,3 +154,47 @@ func TestAttributeCommits_NoDeployments(t *testing.T) {
 	m := attributeCommitsToDeployments(nil, map[string][]string{"c2": {"c1"}})
 	assert.Empty(t, m)
 }
+
+func TestNormalizeRepoUrl(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/acme/repo-x.git":    "https://github.com/acme/repo-x",
+		"https://github.com/acme/repo-x":        "https://github.com/acme/repo-x",
+		"https://github.com/acme/repo-x/":       "https://github.com/acme/repo-x",
+		"https://github.com/acme/repo-x.git/":   "https://github.com/acme/repo-x",
+		"  HTTPS://GitHub.com/Acme/Repo-X.GIT ": "https://github.com/acme/repo-x",
+		"":                                      "",
+	}
+	for in, want := range cases {
+		assert.Equal(t, want, normalizeRepoUrl(in), "input %q", in)
+	}
+}
+
+func TestDecidePrEmit(t *testing.T) {
+	// shipped on this project's scope -> deployed row
+	assert.Equal(t, prEmitDecision{Emit: true, Deployed: true}, decidePrEmit(true, true, true))
+	assert.Equal(t, prEmitDecision{Emit: true, Deployed: true}, decidePrEmit(true, true, false))
+	// shipped on a scope mapped to another project -> that project emits it, not us
+	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(true, false, true))
+	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(true, false, false))
+	// never shipped on a mapped scope -> never-deployed row only if we map the repo
+	assert.Equal(t, prEmitDecision{Emit: true, Deployed: false}, decidePrEmit(false, false, true))
+	assert.Equal(t, prEmitDecision{Emit: false, Deployed: false}, decidePrEmit(false, false, false))
+}
+
+// An older deployment on another scope already shipped the history,
+// so the first deployment on this project's scope only claims the delta.
+func TestAttributeCommits_OlderScopeClaimsHistory(t *testing.T) {
+	parents := map[string][]string{
+		"x2": {"x1"},
+		"x3": {"x2"},
+		"x4": {"x3"},
+	}
+	older := &devops.CicdDeploymentCommit{CommitSha: "x2", CicdScopeId: "scopeA"}
+	newer := &devops.CicdDeploymentCommit{CommitSha: "x4", CicdScopeId: "scopeB"}
+	got := attributeCommitsToDeployments([]*devops.CicdDeploymentCommit{older, newer}, parents)
+
+	assert.Same(t, older, got["x1"])
+	assert.Same(t, older, got["x2"])
+	assert.Same(t, newer, got["x3"])
+	assert.Same(t, newer, got["x4"])
+}

@@ -22,11 +22,13 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/apache/incubator-devlake/core/config"
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
+	"github.com/apache/incubator-devlake/core/log"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/crossdomain"
 	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
@@ -44,6 +46,10 @@ var CalculateChangeLeadTimeMeta = plugin.SubTaskMeta{
 }
 
 // CalculateChangeLeadTime calculates change lead time for a project.
+//
+// PRs are credited to the project whose cicd scope first shipped them, not to the
+// project that currently maps the repo; never-deployed PRs stay with the project
+// that maps the repo, without deploy fields. See decidePrEmit and loadLeadTimeScope.
 func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	// Get instances of the DAL and logger
 	db := taskCtx.GetDal()
@@ -74,11 +80,22 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 		}
 	}
 
+	scope, err := loadLeadTimeScope(data.Options.ProjectName, db, logger)
+	if err != nil {
+		return errors.Default.Wrap(err, "failed to load lead time scope")
+	}
+	logger.Info("Lead time scope for %s: %d scopes, %d owned repos, %d candidate repos, %d deployment urls",
+		scope.ProjectName, len(scope.ScopeIds), len(scope.OwnedRepoIds), len(scope.CandidateRepoIds), len(scope.CandidateDeployUrls))
+	if len(scope.CandidateRepoIds) == 0 {
+		logger.Info("project %s maps no repos and its scopes shipped none; nothing to calculate", scope.ProjectName)
+		return nil
+	}
+
 	// Batch fetch all required data upfront for better performance
 	startTime := time.Now()
 	logger.Info("Batch fetching data for project: %s", data.Options.ProjectName)
 
-	firstCommitsMap, err := batchFetchFirstCommits(data.Options.ProjectName, db)
+	firstCommitsMap, err := batchFetchFirstCommits(scope.CandidateRepoIds, db)
 	if err != nil {
 		return errors.Default.Wrap(err, "failed to batch fetch first commits")
 	}
@@ -92,26 +109,26 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 
 	reviewStartTime := time.Now()
-	firstReviewsMap, err := batchFetchFirstReviews(data.Options.ProjectName, db, botAccountIds)
+	firstReviewsMap, err := batchFetchFirstReviews(scope.CandidateRepoIds, db, botAccountIds)
 	if err != nil {
 		return errors.Default.Wrap(err, "failed to batch fetch first reviews")
 	}
 	logger.Info("Fetched %d first reviews in %v", len(firstReviewsMap), time.Since(reviewStartTime))
 
 	deploymentStartTime := time.Now()
-	deploymentsMap, err := batchFetchDeployments(data.Options.ProjectName, db)
+	deploymentsMap, err := batchFetchDeployments(scope, db)
 	if err != nil {
 		return errors.Default.Wrap(err, "failed to batch fetch deployments")
 	}
 	logger.Info("Fetched %d deployments in %v", len(deploymentsMap), time.Since(deploymentStartTime))
 	logger.Info("Total batch fetch time: %v", time.Since(startTime))
 
-	// Get pull requests by repo project_name
+	// Merged pull requests of every candidate repo; the converter decides per PR
+	// whether this project emits it.
 	var clauses = []dal.Clause{
-		dal.Select("pr.id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date"),
+		dal.Select("pr.id, pr.base_repo_id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date"),
 		dal.From("pull_requests pr"),
-		dal.Join(`LEFT JOIN project_mapping pm ON (pm.row_id = pr.base_repo_id)`),
-		dal.Where("pr.merged_date IS NOT NULL AND pm.project_name = ? AND pm.table = 'repos'", data.Options.ProjectName),
+		dal.Where("pr.merged_date IS NOT NULL AND pr.base_repo_id IN (?)", scope.CandidateRepoIds),
 	}
 	cursor, err := db.Cursor(clauses...)
 	if err != nil {
@@ -162,11 +179,20 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 			projectPrMetric.PrCreatedDate = &pr.CreatedDate
 			projectPrMetric.PrMergedDate = pr.MergedDate
 
-			// Get the deployment for the PR from batch-fetched map
+			// Which deployment first shipped this PR, on any mapped cicd scope, and
+			// does that scope belong to this project?
 			deployment := deploymentsMap[pr.MergeCommitSha]
-
-			// Calculate PR deploy time
-			if deployment != nil && deployment.FinishedDate != nil {
+			decision := decidePrEmit(
+				deployment != nil,
+				deployment != nil && scope.OwnsScope(deployment.CicdScopeId),
+				scope.OwnsRepo(pr.BaseRepoId),
+			)
+			if !decision.Emit {
+				// Shipped on a scope mapped to another project (that project emits it),
+				// or a never-deployed PR of a repo this project no longer maps.
+				return nil, nil
+			}
+			if decision.Deployed && deployment.FinishedDate != nil {
 				projectPrMetric.PrDeployTime = computeTimeSpan(pr.MergedDate, deployment.FinishedDate)
 				projectPrMetric.DeploymentCommitId = deployment.Id
 				projectPrMetric.PrDeployedDate = deployment.FinishedDate
@@ -208,6 +234,33 @@ func computeTimeSpan(start, end *time.Time) *int64 {
 		return nil
 	}
 	return &minutes
+}
+
+// prEmitDecision says whether the project being calculated writes a
+// project_pr_metrics row for a PR, and whether that row carries deploy fields.
+type prEmitDecision struct {
+	Emit     bool
+	Deployed bool
+}
+
+// decidePrEmit applies the attribution rule for lead time. A PR shipped on a cicd
+// scope belongs only to the project that maps that scope; a PR no mapped scope
+// has shipped yet stays with the project that maps its repo, without deploy fields.
+func decidePrEmit(shipped, projectOwnsShipScope, projectOwnsRepo bool) prEmitDecision {
+	if shipped {
+		return prEmitDecision{Emit: projectOwnsShipScope, Deployed: projectOwnsShipScope}
+	}
+	return prEmitDecision{Emit: projectOwnsRepo}
+}
+
+// normalizeRepoUrl makes a deployment's repo_url comparable with repos.url.
+// Webhook deployments carry the clone URL (".git" suffix, sometimes a trailing
+// slash, arbitrary case) and an empty repo_id, so this is the only join key.
+func normalizeRepoUrl(url string) string {
+	u := strings.ToLower(strings.TrimSpace(url))
+	u = strings.TrimSuffix(u, "/")
+	u = strings.TrimSuffix(u, ".git")
+	return strings.TrimSuffix(u, "/")
 }
 
 func matchesBotFilter(botFilterRegex *regexp.Regexp, name string) bool {
@@ -254,17 +307,18 @@ type commitParentEdge struct {
 	ParentCommitSha string `gorm:"column:parent_commit_sha"`
 }
 
-// batchFetchFirstCommits retrieves the first commit for all pull requests in the given project.
+// batchFetchFirstCommits retrieves the first commit for all pull requests of the given repos.
 // Returns a map indexed by PR ID for O(1) lookup performance.
 //
 // The query uses a subquery to find the minimum commit_authored_date for each PR,
 // then joins back to get the full commit record. This is more efficient than
 // fetching all commits and filtering in memory.
-func batchFetchFirstCommits(projectName string, db dal.Dal) (map[string]*code.PullRequestCommit, errors.Error) {
+func batchFetchFirstCommits(repoIds []string, db dal.Dal) (map[string]*code.PullRequestCommit, errors.Error) {
+	commitMap := map[string]*code.PullRequestCommit{}
+	if len(repoIds) == 0 {
+		return commitMap, nil
+	}
 	var results []*code.PullRequestCommit
-
-	// Use a subquery to find the earliest commit for each PR, then join to get full commit details.
-	// This avoids scanning all commits and is optimized by the database engine.
 	err := db.All(
 		&results,
 		dal.Select("prc.*"),
@@ -276,33 +330,31 @@ func batchFetchFirstCommits(projectName string, db dal.Dal) (map[string]*code.Pu
 		) first_commits ON prc.pull_request_id = first_commits.pull_request_id
 		AND prc.commit_authored_date = first_commits.min_date`),
 		dal.Join("INNER JOIN pull_requests pr ON pr.id = prc.pull_request_id"),
-		dal.Join("LEFT JOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.table = 'repos'"),
-		dal.Where("pm.project_name = ?", projectName),
+		dal.Where("pr.base_repo_id IN (?)", repoIds),
 		dal.Orderby("prc.pull_request_id, prc.commit_authored_date ASC"),
 	)
-
 	if err != nil {
 		return nil, errors.Default.Wrap(err, "failed to batch fetch first commits")
 	}
-
-	// Build the map for O(1) lookup by PR ID
-	commitMap := make(map[string]*code.PullRequestCommit, len(results))
 	for _, commit := range results {
 		// Only keep the first commit if multiple commits have the same timestamp
 		if _, exists := commitMap[commit.PullRequestId]; !exists {
 			commitMap[commit.PullRequestId] = commit
 		}
 	}
-
 	return commitMap, nil
 }
 
-// batchFetchFirstReviews retrieves the first review comment for all pull requests in the given project.
+// batchFetchFirstReviews retrieves the first review comment for all pull requests of the given repos.
 // Returns a map indexed by PR ID for O(1) lookup performance.
 //
 // The query uses a subquery to find the minimum created_date for each PR (excluding the PR author
 // and any bot accounts), then joins back to get the full comment record.
-func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []string) (map[string]*code.PullRequestComment, errors.Error) {
+func batchFetchFirstReviews(repoIds []string, db dal.Dal, botAccountIds []string) (map[string]*code.PullRequestComment, errors.Error) {
+	reviewMap := map[string]*code.PullRequestComment{}
+	if len(repoIds) == 0 {
+		return reviewMap, nil
+	}
 	var results []*code.PullRequestComment
 
 	// Exclude bots inside the MIN() subquery (so a bot can't win the minimum) and
@@ -329,9 +381,8 @@ func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []stri
 		) first_reviews ON prc.pull_request_id = first_reviews.pull_request_id
 		AND prc.created_date = first_reviews.min_date`, subParams...),
 		dal.Join("INNER JOIN pull_requests pr ON pr.id = prc.pull_request_id"),
-		dal.Join("LEFT JOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.table = 'repos'"),
-		dal.Where("pm.project_name = ? AND (pr.author_id IS NULL OR pr.author_id = '' OR prc.account_id != pr.author_id)"+botFilterOuter,
-			append([]interface{}{projectName}, outerParams...)...),
+		dal.Where("pr.base_repo_id IN (?) AND (pr.author_id IS NULL OR pr.author_id = '' OR prc.account_id != pr.author_id)"+botFilterOuter,
+			append([]interface{}{repoIds}, outerParams...)...),
 		dal.Orderby("prc.pull_request_id, prc.created_date ASC"),
 	)
 
@@ -340,7 +391,6 @@ func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []stri
 	}
 
 	// Build the map for O(1) lookup by PR ID
-	reviewMap := make(map[string]*code.PullRequestComment, len(results))
 	for _, review := range results {
 		// Only keep the first review if multiple reviews have the same timestamp
 		if _, exists := reviewMap[review.PullRequestId]; !exists {
@@ -351,64 +401,303 @@ func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []stri
 	return reviewMap, nil
 }
 
-// batchFetchDeployments maps each commit to the EARLIEST successful production deployment
-// whose commit descends from it - i.e. the deployment that first shipped that commit.
-// Returns a map indexed by commit SHA for O(1) lookup; the caller looks up a PR by its
-// merge_commit_sha.
+// leadTimeScope is what one project's lead-time calculation looks at.
 //
-// This uses the commit-ancestry definition of "deployed": a commit is shipped by the first
-// successful production deployment that has it as an ancestor in the git graph. It is computed
-// by walking commit_parents from each deployment commit, processing deployments oldest-first
-// and attributing every newly-reached (unclaimed) commit to that deployment. Pruning the walk
-// at already-claimed commits keeps the whole pass O(commits + edges): once a commit is claimed
-// by an earlier deployment, all of its ancestors were claimed in that same walk too.
-//
-// Why not a commits_diffs join: refdiff's incremental diff (old = prev_success) misses commits
-// that reach production via a merge commit or after a superseded Stop/FAILURE deployment
-// (under-linking), while matching any commits_diffs row absorbs the rooted empty-baseline
-// diffs that Stop/FAILURE deployments generate and collapses whole histories onto one
-// deployment (over-linking). Walking the real commit graph avoids both.
-//
-// Note: requires a complete commit graph. Where gitextractor shallow-cloned (missing commits),
-// the walk stops early; the full-clone collection must run first. Also, the first deployment we
-// have recorded for a repo claims its entire prior history, so PRs merged before deployment
-// tracking began (or across a tracking gap, e.g. a repo migration) can attach to a later
-// deployment with an inflated lead time - handle those via scope/guardrails, not here.
-func batchFetchDeployments(projectName string, db dal.Dal) (map[string]*devops.CicdDeploymentCommit, errors.Error) {
-	// 1. All successful production deployments for the project, earliest first.
-	var deployments []*devops.CicdDeploymentCommit
-	err := db.All(
-		&deployments,
-		dal.Select("dc.*"),
-		dal.From("cicd_deployment_commits dc"),
-		dal.Join("LEFT JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id"),
-		dal.Where("dc.environment = 'PRODUCTION'"), // TODO: remove this when multi-environment is supported
-		dal.Where("dc.result = ? AND pm.project_name = ?", devops.RESULT_SUCCESS, projectName),
-		dal.Orderby("dc.finished_date ASC, dc.id ASC"),
-	)
-	if err != nil {
-		return nil, errors.Default.Wrap(err, "failed to fetch deployments")
+// S_P (ScopeIds) is the cicd scopes mapped to the project. R_P (OwnedRepoIds) are the
+// repos currently mapped to the project. R_ship(P) are repos deployed to
+// production on the project's scopes, whether or not they are still mapped to it;
+// that is what lets a project keep the PRs it shipped after a repo moves to
+// another project. R_ship is resolved by deployment URL or by commit membership
+// (repo_commits), the latter covering renamed repos whose deployments keep the
+// old URL. The commit join is a hash join of the project's scope deployments
+// against repo_commits, which has no index on commit_sha alone, so it only runs
+// for projects that have deployments whose URL does not resolve, and only over
+// those deployments. C_P (CandidateRepoIds) is the union.
+type leadTimeScope struct {
+	ProjectName         string
+	ScopeIds            []string
+	OwnedRepoIds        []string
+	CandidateRepoIds    []string
+	CandidateDeployUrls []string
+	MappedScopeIds      []string
+
+	scopeSet map[string]struct{}
+	ownedSet map[string]struct{}
+}
+
+func (s *leadTimeScope) OwnsScope(scopeId string) bool {
+	_, ok := s.scopeSet[scopeId]
+	return ok
+}
+
+func (s *leadTimeScope) OwnsRepo(repoId string) bool {
+	_, ok := s.ownedSet[repoId]
+	return ok
+}
+
+type projectMappingRow struct {
+	ProjectName string `gorm:"column:project_name"`
+	RowId       string `gorm:"column:row_id"`
+}
+
+type repoUrlRow struct {
+	Id  string `gorm:"column:id"`
+	Url string `gorm:"column:url"`
+}
+
+type repoIdRow struct {
+	RepoId string `gorm:"column:repo_id"`
+}
+
+type deployUrlRow struct {
+	RepoUrl string `gorm:"column:repo_url"`
+}
+
+// loadLeadTimeScope resolves S_P, R_P, R_ship(P) and C_P for projectName.
+// Deployments carry an empty repo_id, so R_ship is resolved by normalized URL
+// (repo_url against repos.url, matched in Go so the SQL stays portable) and, for
+// deployments whose URL does not resolve to a repo, by the deployment commit's
+// membership in repo_commits.
+func loadLeadTimeScope(projectName string, db dal.Dal, logger log.Logger) (*leadTimeScope, errors.Error) {
+	scope := &leadTimeScope{
+		ProjectName: projectName,
+		scopeSet:    map[string]struct{}{},
+		ownedSet:    map[string]struct{}{},
 	}
 
-	// 2. The project's commit graph as child -> parents adjacency.
+	var scopeRows []*projectMappingRow
+	if err := db.All(&scopeRows,
+		dal.Select("pm.project_name, pm.row_id"),
+		dal.From("project_mapping pm"),
+		dal.Where("pm.table = 'cicd_scopes'"),
+	); err != nil {
+		return nil, errors.Default.Wrap(err, "failed to load cicd scope mappings")
+	}
+	projectByScope := map[string]string{}
+	warnedScopes := map[string]struct{}{}
+	for _, row := range scopeRows {
+		if first, seen := projectByScope[row.RowId]; !seen {
+			projectByScope[row.RowId] = row.ProjectName
+		} else if first != row.ProjectName {
+			if _, warned := warnedScopes[row.RowId]; !warned {
+				warnedScopes[row.RowId] = struct{}{}
+				logger.Warn(nil, "cicd scope %s is mapped to more than one project; deployed PRs on it will be counted by each of them", row.RowId)
+			}
+		}
+		scope.MappedScopeIds = append(scope.MappedScopeIds, row.RowId)
+		if row.ProjectName == projectName {
+			scope.ScopeIds = append(scope.ScopeIds, row.RowId)
+			scope.scopeSet[row.RowId] = struct{}{}
+		}
+	}
+
+	var repoRows []*projectMappingRow
+	if err := db.All(&repoRows,
+		dal.Select("pm.project_name, pm.row_id"),
+		dal.From("project_mapping pm"),
+		dal.Where("pm.table = 'repos' AND pm.project_name = ?", projectName),
+	); err != nil {
+		return nil, errors.Default.Wrap(err, "failed to load repo mappings")
+	}
+	candidates := map[string]struct{}{}
+	for _, row := range repoRows {
+		scope.OwnedRepoIds = append(scope.OwnedRepoIds, row.RowId)
+		scope.ownedSet[row.RowId] = struct{}{}
+		candidates[row.RowId] = struct{}{}
+	}
+
+	var repos []*repoUrlRow
+	if err := db.All(&repos, dal.Select("id, url"), dal.From("repos")); err != nil {
+		return nil, errors.Default.Wrap(err, "failed to load repos")
+	}
+	reposByUrl := map[string][]string{}
+	urlByRepo := map[string]string{}
+	for _, r := range repos {
+		u := normalizeRepoUrl(r.Url)
+		if u == "" {
+			continue
+		}
+		reposByUrl[u] = append(reposByUrl[u], r.Id)
+		urlByRepo[r.Id] = u
+	}
+
+	// Distinct repo_url values on successful production deployments. ~600 rows;
+	// normalized in Go so the match works for ".git" and case differences.
+	var deployUrls []*deployUrlRow
+	if err := db.All(&deployUrls,
+		dal.Select("DISTINCT dc.repo_url"),
+		dal.From("cicd_deployment_commits dc"),
+		dal.Where("dc.environment = ? AND dc.result = ? AND dc.repo_url IS NOT NULL",
+			"PRODUCTION", devops.RESULT_SUCCESS),
+	); err != nil {
+		return nil, errors.Default.Wrap(err, "failed to load deployment repo urls")
+	}
+
+	// R_ship(P): repos deployed on the project's own cicd scopes.
+	if len(scope.ScopeIds) > 0 {
+		var shipped []*deployUrlRow
+		if err := db.All(&shipped,
+			dal.Select("DISTINCT dc.repo_url"),
+			dal.From("cicd_deployment_commits dc"),
+			dal.Where("dc.environment = ? AND dc.result = ? AND dc.cicd_scope_id IN (?)",
+				"PRODUCTION", devops.RESULT_SUCCESS, scope.ScopeIds),
+		); err != nil {
+			return nil, errors.Default.Wrap(err, "failed to load repos shipped by project scopes")
+		}
+		// NULL and empty repo_url values are kept on purpose: they never resolve
+		// by URL and must reach the commit-membership query below.
+		var unresolvedUrls []string
+		for _, row := range shipped {
+			ids, ok := reposByUrl[normalizeRepoUrl(row.RepoUrl)]
+			if !ok {
+				unresolvedUrls = append(unresolvedUrls, row.RepoUrl)
+				continue
+			}
+			for _, id := range ids {
+				candidates[id] = struct{}{}
+			}
+		}
+
+		// Renamed repos keep their old URL on deployments. Resolve those by the
+		// deployment commit instead, the same way batchFetchDeployments selects D,
+		// restricted to the deployments whose URL did not resolve.
+		if len(unresolvedUrls) > 0 {
+			var shippedByCommit []*repoIdRow
+			if err := db.All(&shippedByCommit,
+				dal.Select("DISTINCT rc.repo_id AS repo_id"),
+				dal.From("repo_commits rc"),
+				dal.Join("INNER JOIN cicd_deployment_commits dc ON dc.commit_sha = rc.commit_sha"),
+				dal.Where("dc.environment = ? AND dc.result = ? AND dc.finished_date IS NOT NULL AND dc.cicd_scope_id IN (?) AND (dc.repo_url IN (?) OR dc.repo_url IS NULL OR dc.repo_url = '')",
+					"PRODUCTION", devops.RESULT_SUCCESS, scope.ScopeIds, unresolvedUrls),
+			); err != nil {
+				return nil, errors.Default.Wrap(err, "failed to load repos shipped by project scopes (by commit)")
+			}
+			for _, row := range shippedByCommit {
+				candidates[row.RepoId] = struct{}{}
+			}
+		}
+	}
+
+	candidateUrls := map[string]struct{}{}
+	for id := range candidates {
+		scope.CandidateRepoIds = append(scope.CandidateRepoIds, id)
+		if u, ok := urlByRepo[id]; ok {
+			candidateUrls[u] = struct{}{}
+		}
+	}
+	sort.Strings(scope.CandidateRepoIds)
+	for _, row := range deployUrls {
+		if _, ok := candidateUrls[normalizeRepoUrl(row.RepoUrl)]; ok {
+			scope.CandidateDeployUrls = append(scope.CandidateDeployUrls, row.RepoUrl)
+		}
+	}
+	return scope, nil
+}
+
+// batchFetchDeployments maps each commit of the project's candidate repos to the
+// EARLIEST successful production deployment, on ANY mapped cicd scope, whose commit
+// descends from it: the deployment that first shipped that commit. The caller
+// looks up a PR by its merge_commit_sha and then decides, with decidePrEmit,
+// whether the first-ship deployment belongs to this project.
+//
+// Loading the deployments of a repo from every mapped scope (not just this
+// project's) is what stops remapping a repo from back-linking its whole history
+// onto the new project's first deployment: the previous project's deployments
+// already claim that history and prune the walk. Deployments on scopes mapped
+// to no project are ignored; they are credited to no project.
+//
+// Deployments are selected by repo_url or by commit membership in repo_commits
+// of the candidate repos, never by which project maps the scope. That is two
+// plain portable queries, de-duplicated and ordered in Go, instead of an OR over
+// an IN-subquery that neither MySQL nor PostgreSQL can turn into a semi-join.
+// Because selection ignores which project maps the scope, every project that considers a
+// repo sees the same deployments and the same commit
+// graph for it and agrees on which deployment first shipped a commit. This
+// assumes a commit SHA belongs to one repo and a cicd scope is mapped to one
+// project; otherwise two projects can still differ.
+//
+// Requires a complete commit graph (see gitextractor full clone). A repo's very
+// first deployment anywhere still claims its pre-tracking history; that case
+// has no earlier deployment to bound it and is out of scope here.
+func batchFetchDeployments(scope *leadTimeScope, db dal.Dal) (map[string]*devops.CicdDeploymentCommit, errors.Error) {
+	if len(scope.MappedScopeIds) == 0 || len(scope.CandidateRepoIds) == 0 {
+		return map[string]*devops.CicdDeploymentCommit{}, nil
+	}
+
+	// 1. Successful production deployments on mapped scopes that match a
+	//    candidate repo by URL or by commit membership, earliest first.
+	base := []dal.Clause{
+		dal.Select("dc.*"),
+		dal.From("cicd_deployment_commits dc"),
+		dal.Where("dc.environment = ?", "PRODUCTION"), // TODO: remove this when multi-environment is supported
+		dal.Where("dc.result = ?", devops.RESULT_SUCCESS),
+		dal.Where("dc.finished_date IS NOT NULL"),
+		dal.Where("dc.cicd_scope_id IN (?)", scope.MappedScopeIds),
+	}
+	byId := map[string]*devops.CicdDeploymentCommit{}
+	collect := func(rows []*devops.CicdDeploymentCommit) {
+		for _, d := range rows {
+			if _, seen := byId[d.Id]; !seen {
+				byId[d.Id] = d
+			}
+		}
+	}
+	// 1a. Deployments whose repo_url resolves to a candidate repo.
+	if len(scope.CandidateDeployUrls) > 0 {
+		var rows []*devops.CicdDeploymentCommit
+		if err := db.All(&rows, append(append([]dal.Clause{}, base...), dal.Where("dc.repo_url IN (?)", scope.CandidateDeployUrls))...); err != nil {
+			return nil, errors.Default.Wrap(err, "failed to fetch deployments by repo url")
+		}
+		collect(rows)
+	}
+	// 1b. Deployments whose commit belongs to a candidate repo (covers renamed repos
+	//     whose deployments still carry the old URL). The join can repeat a
+	//     deployment when a commit is in several repos; byId de-duplicates.
+	{
+		var rows []*devops.CicdDeploymentCommit
+		if err := db.All(&rows, append(append([]dal.Clause{}, base...),
+			dal.Join("INNER JOIN repo_commits rc ON rc.commit_sha = dc.commit_sha"),
+			dal.Where("rc.repo_id IN (?)", scope.CandidateRepoIds),
+		)...); err != nil {
+			return nil, errors.Default.Wrap(err, "failed to fetch deployments by commit")
+		}
+		collect(rows)
+	}
+	deployments := make([]*devops.CicdDeploymentCommit, 0, len(byId))
+	for _, d := range byId {
+		deployments = append(deployments, d)
+	}
+	// FinishedDate is non-nil because of the filter above; a nil still sorts
+	// earliest rather than panicking if the filter is ever relaxed.
+	sort.Slice(deployments, func(i, j int) bool {
+		fi, fj := deployments[i].FinishedDate, deployments[j].FinishedDate
+		switch {
+		case fi == nil && fj != nil:
+			return true
+		case fi != nil && fj == nil:
+			return false
+		case fi != nil && fj != nil && !fi.Equal(*fj):
+			return fi.Before(*fj)
+		}
+		return deployments[i].Id < deployments[j].Id
+	})
+
+	// 2. Commit graph of the candidate repos as child -> parents adjacency.
+	parents := map[string][]string{}
 	var edges []*commitParentEdge
-	err = db.All(
-		&edges,
+	if err := db.All(&edges,
 		dal.Select("cp.commit_sha, cp.parent_commit_sha"),
 		dal.From("commit_parents cp"),
 		dal.Join("INNER JOIN repo_commits rc ON rc.commit_sha = cp.commit_sha"),
-		dal.Join("INNER JOIN project_mapping pm ON pm.table = 'repos' AND pm.row_id = rc.repo_id"),
-		dal.Where("pm.project_name = ?", projectName),
-	)
-	if err != nil {
+		dal.Where("rc.repo_id IN (?)", scope.CandidateRepoIds),
+	); err != nil {
 		return nil, errors.Default.Wrap(err, "failed to fetch commit graph")
 	}
-	parents := make(map[string][]string, len(edges))
 	for _, e := range edges {
 		parents[e.CommitSha] = append(parents[e.CommitSha], e.ParentCommitSha)
 	}
 
-	// 3. Attribute each commit to the first deployment that reaches it (oldest deployment first).
+	// 3. Attribute each commit to the first deployment that reaches it.
 	return attributeCommitsToDeployments(deployments, parents), nil
 }
 
