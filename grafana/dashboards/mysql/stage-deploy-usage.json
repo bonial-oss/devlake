@@ -1,0 +1,1000 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "datasource",
+          "uid": "grafana"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "grafana"
+      },
+      "gridPos": {
+        "h": 2,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "Staging deployment usage (`environment = 'STAGING'`), independent from the DORA (production) dashboards. PR panels count PRs **created in the selected range**; deploy panels use the deploy date. Scope with the **Project** and time selectors.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "13.0.2",
+      "type": "text"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Stage deploys per time bucket, one series per project/team. Bucket size follows the Granularity selector (Auto adapts to the selected range).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 2
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "maxHeight": 600,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "time_series",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "-- Stage deploys per time bucket ($granularity: auto/day/week/~month), grouped by project/team\nSELECT\n  $__timeGroupAlias(cdc.finished_date, $granularity),\n  COALESCE(pm.project_name, 'Unmapped') AS metric,\n  COUNT(DISTINCT cdc.cicd_deployment_id) AS value\nFROM cicd_deployment_commits cdc\nLEFT JOIN project_mapping pm\n  ON cdc.cicd_scope_id = pm.row_id AND pm.`table` = 'cicd_scopes'\nWHERE cdc.environment = 'STAGING'\n  AND pm.project_name IN ($project)\n  AND $__timeFilter(cdc.finished_date)\nGROUP BY 1, metric\nORDER BY 1",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Stage deploys by project/team",
+      "type": "timeseries",
+      "interval": "1d"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Stage deploys per component (cicd_deployments.name), sorted desc. Paginated \u2014 top rows first.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "deploys"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient",
+                  "valueDisplayMode": "color"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 520
+              },
+              {
+                "id": "min",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "component"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 360
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 6,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": "",
+          "enablePagination": true
+        },
+        "sortBy": [
+          {
+            "displayName": "deploys",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "-- Stage deploys per component, using the deployment name (cicd_deployments.name)\nSELECT\n  CASE WHEN cd.name = '' OR cd.name IS NULL THEN 'N/A' ELSE cd.name END AS component,\n  COUNT(DISTINCT cdc.cicd_deployment_id) AS deploys\nFROM cicd_deployment_commits cdc\nJOIN cicd_deployments cd ON cd.id = cdc.cicd_deployment_id\nLEFT JOIN project_mapping pm\n  ON cdc.cicd_scope_id = pm.row_id AND pm.`table` = 'cicd_scopes'\nWHERE cdc.environment = 'STAGING'\n  AND pm.project_name IN ($project)\n  AND $__timeFilter(cdc.finished_date)\nGROUP BY component\nORDER BY deploys DESC",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Stage deploys per component",
+      "type": "table"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Distinct PRs (created in range) deployed to stage at least once, matched by commit or head branch.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "-- Deploy-first: materialize the (small) STAGING set, then match PRs.\nWITH stage AS (\n  SELECT DISTINCT commit_sha, ref_name, TRIM(TRAILING '.git' FROM repo_url) AS repo_url\n  FROM cicd_deployment_commits WHERE environment = 'STAGING'\n),\nconnected AS (\n  SELECT pr.id FROM pull_requests pr JOIN stage s ON s.commit_sha = pr.merge_commit_sha\n  UNION\n  SELECT prc.pull_request_id FROM pull_request_commits prc JOIN stage s ON s.commit_sha = prc.commit_sha\n  UNION\n  SELECT pr.id FROM pull_requests pr JOIN repos r ON r.id = pr.base_repo_id\n    JOIN stage s ON s.ref_name = pr.head_ref AND s.repo_url = TRIM(TRAILING '.git' FROM r.url)\n)\nSELECT COUNT(DISTINCT pr.id) AS `PRs connected to stage`\nFROM pull_requests pr\nJOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.`table` = 'repos'\nJOIN connected c ON c.id = pr.id\nWHERE pm.project_name IN ($project)\n  AND $__timeFilter(pr.created_date)",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "PRs connected to stage",
+      "type": "stat"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Share of PRs created in range that reached a stage environment.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "-- Share of PRs (created in range) that reached stage. Deploy-first.\nWITH stage AS (\n  SELECT DISTINCT commit_sha, ref_name, TRIM(TRAILING '.git' FROM repo_url) AS repo_url\n  FROM cicd_deployment_commits WHERE environment = 'STAGING'\n),\nconnected AS (\n  SELECT pr.id FROM pull_requests pr JOIN stage s ON s.commit_sha = pr.merge_commit_sha\n  UNION\n  SELECT prc.pull_request_id FROM pull_request_commits prc JOIN stage s ON s.commit_sha = prc.commit_sha\n  UNION\n  SELECT pr.id FROM pull_requests pr JOIN repos r ON r.id = pr.base_repo_id\n    JOIN stage s ON s.ref_name = pr.head_ref AND s.repo_url = TRIM(TRAILING '.git' FROM r.url)\n)\nSELECT ROUND(100 * COUNT(DISTINCT c.id) / NULLIF(COUNT(DISTINCT pr.id), 0), 1)\n       AS `% of PRs deployed to stage`\nFROM pull_requests pr\nJOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.`table` = 'repos'\nLEFT JOIN connected c ON c.id = pr.id\nWHERE pm.project_name IN ($project)\n  AND $__timeFilter(pr.created_date)",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "% of PRs deployed to stage",
+      "type": "stat"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Per team: total PRs created in range, how many reached stage, and the proportion. Sorted by proportion.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "% deployed to stage"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "max",
+                "value": 100
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total PRs"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Deployed to stage"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "% deployed to stage"
+          }
+        ]
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "-- Per team: total PRs, how many reached stage, and the proportion. Deploy-first.\nWITH stage AS (\n  SELECT DISTINCT commit_sha, ref_name, TRIM(TRAILING '.git' FROM repo_url) AS repo_url\n  FROM cicd_deployment_commits WHERE environment = 'STAGING'\n),\nconnected AS (\n  SELECT pr.id FROM pull_requests pr JOIN stage s ON s.commit_sha = pr.merge_commit_sha\n  UNION\n  SELECT prc.pull_request_id FROM pull_request_commits prc JOIN stage s ON s.commit_sha = prc.commit_sha\n  UNION\n  SELECT pr.id FROM pull_requests pr JOIN repos r ON r.id = pr.base_repo_id\n    JOIN stage s ON s.ref_name = pr.head_ref AND s.repo_url = TRIM(TRAILING '.git' FROM r.url)\n)\nSELECT\n  COALESCE(pm.project_name, 'Unmapped') AS team,\n  COUNT(DISTINCT pr.id) AS `Total PRs`,\n  COUNT(DISTINCT c.id) AS `Deployed to stage`,\n  ROUND(100 * COUNT(DISTINCT c.id) / NULLIF(COUNT(DISTINCT pr.id), 0), 1) AS `% deployed to stage`\nFROM pull_requests pr\nJOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.`table` = 'repos'\nLEFT JOIN connected c ON c.id = pr.id\nWHERE pm.project_name IN ($project)\n  AND $__timeFilter(pr.created_date)\nGROUP BY team\nORDER BY `% deployed to stage` DESC",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "PRs deployed to stage by team (proportion)",
+      "type": "table"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Every PR (created in range) that reached stage, with how many times and when it was last deployed. Click the PR to open it.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pr"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open PR",
+                    "url": "${__data.fields.url}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "title"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 320
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stage_deploys"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "last_stage_deploy"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "created"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 7,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "stage_deploys"
+          }
+        ]
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "-- Individual PRs that reached stage, with their stage-deploy activity. Deploy-first.\nWITH stage AS (\n  SELECT cicd_deployment_id, commit_sha, ref_name, finished_date,\n         TRIM(TRAILING '.git' FROM repo_url) AS repo_url\n  FROM cicd_deployment_commits WHERE environment = 'STAGING'\n),\npr_stage AS (\n  SELECT pr.id AS pr_id, s.cicd_deployment_id, s.finished_date\n  FROM pull_requests pr JOIN stage s ON s.commit_sha = pr.merge_commit_sha\n  UNION\n  SELECT prc.pull_request_id, s.cicd_deployment_id, s.finished_date\n  FROM pull_request_commits prc JOIN stage s ON s.commit_sha = prc.commit_sha\n  UNION\n  SELECT pr.id, s.cicd_deployment_id, s.finished_date\n  FROM pull_requests pr JOIN repos r ON r.id = pr.base_repo_id\n    JOIN stage s ON s.ref_name = pr.head_ref AND s.repo_url = TRIM(TRAILING '.git' FROM r.url)\n)\nSELECT\n  COALESCE(pm.project_name, 'Unmapped') AS team,\n  pr.pull_request_key AS pr,\n  pr.title AS title,\n  r.name AS repo,\n  pr.author_name AS author,\n  pr.head_ref AS branch,\n  DATE(pr.created_date) AS created,\n  COUNT(DISTINCT ps.cicd_deployment_id) AS stage_deploys,\n  DATE(MAX(ps.finished_date)) AS last_stage_deploy,\n  pr.url AS url\nFROM pull_requests pr\nJOIN repos r ON r.id = pr.base_repo_id\nJOIN project_mapping pm ON pm.row_id = pr.base_repo_id AND pm.`table` = 'repos'\nJOIN pr_stage ps ON ps.pr_id = pr.id\nWHERE pm.project_name IN ($project)\n  AND $__timeFilter(pr.created_date)\nGROUP BY team, pr, title, repo, author, branch, created, url\nORDER BY stage_deploys DESC, last_stage_deploy DESC",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Stage-deployed PRs (detail)",
+      "type": "table"
+    },
+    {
+      "datasource": "mysql",
+      "description": "Debug: PRs created in range, scoped by project(s), with the mapped team and a deployed_to_stage flag.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "url"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pr"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open PR",
+                    "url": "${__data.fields.url}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "merge_commit"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "deployed_to_stage"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "yes": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "no": {
+                        "color": "text",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "fields": "",
+          "reducer": [
+            "count"
+          ],
+          "show": true
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "created"
+          }
+        ]
+      },
+      "pluginVersion": "13.0.2",
+      "targets": [
+        {
+          "datasource": "mysql",
+          "editorMode": "code",
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "-- DEBUG: PRs created in range, scoped by project(s), with a deployed_to_stage flag. Deploy-first.\nWITH stage AS (\n  SELECT DISTINCT commit_sha, ref_name, TRIM(TRAILING '.git' FROM repo_url) AS repo_url\n  FROM cicd_deployment_commits WHERE environment = 'STAGING'\n),\nconnected AS (\n  SELECT pr.id FROM pull_requests pr JOIN stage s ON s.commit_sha = pr.merge_commit_sha\n  UNION\n  SELECT prc.pull_request_id FROM pull_request_commits prc JOIN stage s ON s.commit_sha = prc.commit_sha\n  UNION\n  SELECT pr.id FROM pull_requests pr JOIN repos r ON r.id = pr.base_repo_id\n    JOIN stage s ON s.ref_name = pr.head_ref AND s.repo_url = TRIM(TRAILING '.git' FROM r.url)\n)\nSELECT\n  COALESCE((\n    SELECT MIN(pm.project_name) FROM project_mapping pm\n    WHERE pm.row_id = pr.base_repo_id AND pm.`table` = 'repos'\n  ), 'Unmapped') AS team,\n  pr.pull_request_key AS pr,\n  r.name AS repo,\n  pr.author_name AS author,\n  pr.head_ref AS branch,\n  DATE(pr.created_date) AS created,\n  pr.merge_commit_sha AS merge_commit,\n  CASE WHEN c.id IS NOT NULL THEN 'yes' ELSE 'no' END AS deployed_to_stage,\n  pr.url AS url\nFROM pull_requests pr\nJOIN repos r ON r.id = pr.base_repo_id\nLEFT JOIN connected c ON c.id = pr.id\nWHERE $__timeFilter(pr.created_date)\n  AND EXISTS (\n    SELECT 1 FROM project_mapping pm\n    WHERE pm.row_id = pr.base_repo_id AND pm.`table` = 'repos'\n      AND pm.project_name IN ($project)\n  )\nORDER BY created DESC",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "All PRs in range (debug)",
+      "type": "table"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": [
+    "Staging",
+    "Deployments"
+  ],
+  "templating": {
+    "list": [
+      {
+        "auto": true,
+        "auto_count": 30,
+        "auto_min": "1d",
+        "current": {
+          "selected": false,
+          "text": "auto",
+          "value": "$__auto_interval_granularity"
+        },
+        "hide": 0,
+        "label": "Granularity",
+        "name": "granularity",
+        "options": [
+          {
+            "selected": true,
+            "text": "auto",
+            "value": "$__auto_interval_granularity"
+          },
+          {
+            "selected": false,
+            "text": "1d",
+            "value": "1d"
+          },
+          {
+            "selected": false,
+            "text": "1w",
+            "value": "1w"
+          },
+          {
+            "selected": false,
+            "text": "30d",
+            "value": "30d"
+          }
+        ],
+        "query": "1d,1w,30d",
+        "refresh": 2,
+        "skipUrlSync": false,
+        "type": "interval"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": "mysql",
+        "definition": "select distinct name from projects",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Project",
+        "multi": true,
+        "name": "project",
+        "options": [],
+        "query": "select distinct name from projects",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Stage Deploy Usage",
+  "uid": "stage-deploy-usage",
+  "version": 1,
+  "weekStart": ""
+}
