@@ -18,14 +18,14 @@ limitations under the License.
 package tasks
 
 import (
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/didgen"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/azuredevops_go/models"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer/devops"
+	"github.com/apache/devlake/core/models/domainlayer/didgen"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/azuredevops_go/models"
 	"reflect"
 )
 
@@ -93,8 +93,8 @@ func ConvertBuilds(taskCtx plugin.SubTaskContext) errors.Error {
 				OriginalStatus: build.Status,
 				OriginalResult: build.Result,
 				CicdScopeId:    repoIdGen.Generate(data.Options.ConnectionId, build.RepositoryId),
-				Environment:    data.RegexEnricher.ReturnNameIfMatched(devops.PRODUCTION, build.Name+";"+build.Tags),
-				Type:           data.RegexEnricher.ReturnNameIfMatched(devops.DEPLOYMENT, build.Name+";"+build.Tags),
+				Environment:    data.RegexEnricher.ReturnNameIfMatched(devops.PRODUCTION, build.Name+";"+build.RunName+";"+build.Tags),
+				Type:           data.RegexEnricher.ReturnNameIfMatched(devops.DEPLOYMENT, build.Name+";"+build.RunName+";"+build.Tags),
 				DurationSec:    duration,
 				TaskDatesInfo: devops.TaskDatesInfo{
 					CreatedDate:  *build.QueueTime,

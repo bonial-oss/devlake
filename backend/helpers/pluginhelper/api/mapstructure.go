@@ -23,12 +23,12 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/models"
-	"github.com/apache/incubator-devlake/core/models/common"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/models"
+	"github.com/apache/devlake/core/models/common"
 	"github.com/go-playground/validator/v10"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 )
 
 var defaultCustomDecoderHooks = []mapstructure.DecodeHookFunc{decodeHookStringFloat64, decodeHookStringToTime, DecodeHook}

@@ -17,6 +17,7 @@
  */
 
 import styled from 'styled-components';
+import { Alert } from 'antd';
 
 export const Wrapper = styled.div`
   h2 {
@@ -82,6 +83,17 @@ export const Wrapper = styled.div`
       border-radius: 8px;
     }
 
+    & > .deprecated {
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 4px 8px;
+      font-size: 12px;
+      color: ${({ theme }) => theme.colors.textInverse};
+      background-color: ${({ theme }) => theme.colors.error};
+      border-radius: 8px;
+    }
+
     & > .logo {
       width: 60px;
       height: 60px;
@@ -113,6 +125,18 @@ export const Wrapper = styled.div`
     & > .count {
       color: ${({ theme }) => theme.colors.textMuted};
     }
+  }
+`;
+
+export const DeprecationAlert = styled(Alert)`
+  margin-top: 12px;
+
+  & + h4 {
+    margin-top: 12px;
+  }
+
+  .ant-alert-description {
+    white-space: pre-line;
   }
 `;
 

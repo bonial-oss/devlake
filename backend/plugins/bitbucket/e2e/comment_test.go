@@ -20,12 +20,12 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/bitbucket/impl"
-	"github.com/apache/incubator-devlake/plugins/bitbucket/models"
-	"github.com/apache/incubator-devlake/plugins/bitbucket/tasks"
+	"github.com/apache/devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/core/models/domainlayer/ticket"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/bitbucket/impl"
+	"github.com/apache/devlake/plugins/bitbucket/models"
+	"github.com/apache/devlake/plugins/bitbucket/tasks"
 )
 
 func TestCommentDataFlow(t *testing.T) {
@@ -98,6 +98,8 @@ func TestCommentDataFlow(t *testing.T) {
 	)
 
 	// verify comment conversion
+	// the issue comment convertor joins _tool_bitbucket_issues
+	dataflowTester.ImportCsvIntoTabler("./snapshot_tables/_tool_bitbucket_issues.csv", &models.BitbucketIssue{})
 	dataflowTester.FlushTabler(&ticket.IssueComment{})
 	dataflowTester.FlushTabler(&code.PullRequestComment{})
 	dataflowTester.Subtask(tasks.ConvertIssueCommentsMeta, taskData)

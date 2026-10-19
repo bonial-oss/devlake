@@ -24,14 +24,14 @@ import (
 	"sort"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/config"
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/crossdomain"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/core/config"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/core/models/domainlayer/crossdomain"
+	"github.com/apache/devlake/core/models/domainlayer/devops"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
 )
 
 // CalculateChangeLeadTimeMeta contains metadata for the CalculateChangeLeadTime subtask.
@@ -108,7 +108,7 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 
 	// Get pull requests by repo project_name
 	var clauses = []dal.Clause{
-		dal.Select("pr.id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date"),
+		dal.Select("pr.id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date, pr.head_ref"),
 		dal.From("pull_requests pr"),
 		dal.Join(`LEFT JOIN project_mapping pm ON (pm.row_id = pr.base_repo_id)`),
 		dal.Where("pr.merged_date IS NOT NULL AND pm.project_name = ? AND pm.table = 'repos'", data.Options.ProjectName),
@@ -119,6 +119,7 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 	defer cursor.Close()
 
+	var total, excluded int
 	converter, err := api.NewDataConverter(api.DataConverterArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
 			Ctx: taskCtx,
@@ -133,6 +134,11 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 		Input:        cursor,
 		Convert: func(inputRow interface{}) ([]interface{}, errors.Error) {
 			pr := inputRow.(*code.PullRequest)
+			total++
+			if !MatchPrHeadRef(data.PrHeadRefRegexp, pr.HeadRef) {
+				excluded++
+				return nil, nil
+			}
 			// Initialize a new ProjectPrMetric
 			projectPrMetric := &crossdomain.ProjectPrMetric{}
 			projectPrMetric.Id = pr.Id
@@ -195,7 +201,13 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 		return err
 	}
 	// Execute the data converter
-	return converter.Execute()
+	if err := converter.Execute(); err != nil {
+		return err
+	}
+	if data.PrHeadRefRegexp != nil {
+		logger.Info("prHeadRefPattern %q excluded %d of %d merged pull requests", data.PrHeadRefRegexp.String(), excluded, total)
+	}
+	return nil
 }
 
 func computeTimeSpan(start, end *time.Time) *int64 {
@@ -324,7 +336,9 @@ func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []stri
 			SELECT prc2.pull_request_id, MIN(prc2.created_date) as min_date
 			FROM pull_request_comments prc2
 			INNER JOIN pull_requests pr2 ON pr2.id = prc2.pull_request_id
-			WHERE (pr2.author_id IS NULL OR pr2.author_id = '' OR prc2.account_id != pr2.author_id)`+botFilterSub+`
+			LEFT JOIN accounts acc2 ON acc2.id = prc2.account_id
+			WHERE (pr2.author_id IS NULL OR pr2.author_id = '' OR prc2.account_id != pr2.author_id)
+			AND COALESCE(acc2.is_bot, false) = false`+botFilterSub+`
 			GROUP BY prc2.pull_request_id
 		) first_reviews ON prc.pull_request_id = first_reviews.pull_request_id
 		AND prc.created_date = first_reviews.min_date`, subParams...),

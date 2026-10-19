@@ -22,14 +22,22 @@ TAG ?= $(shell if [ -d .git ]; then git tag --points-at HEAD; else echo "local_b
 IMAGE_REPO ?= "apache"
 VERSION = $(TAG)@$(SHA)
 PYTHON_DIR ?= "./python"
+MOCKERY_VERSION ?= v3.8.1
+# Always resolve mockery through the module cache instead of relying on whatever
+# `mockery` happens to be on the PATH: the CI builder image ships mockery v2,
+# which cannot read the v3 YAML configuration.
+# The tool must be built for the host, not for the cross-compile target that
+# `backend/Dockerfile` exports (GOARCH/CC for `make all`), hence the empty
+# GOOS/GOARCH and CGO_ENABLED=0.
+MOCKERY ?= GOOS= GOARCH= CGO_ENABLED=0 go run github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
 
 
 all: build
 
 go-dep:
-	go install github.com/vektra/mockery/v2@v2.53.6
+	go install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
 	go install github.com/swaggo/swag/cmd/swag@v1.16.6
-	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 
 go-dev-tools:
 	# go install github.com/atombender/go-jsonschema/cmd/gojsonschema@latest
@@ -72,9 +80,15 @@ debug: build-plugin-debug
 	dlv debug server/main.go
 
 mock:
-	rm -rf mocks
-	mockery --recursive --keeptree --dir=./core --output=./mocks/core --unroll-variadic=false --name='.*'
-	mockery --recursive --keeptree --dir=./helpers --output=./mocks/helpers --unroll-variadic=false --name='.*'
+	# Remove previously generated mocks but keep the tracked doc.go placeholders,
+	# which keep the mock import paths resolvable for `go mod tidy`.
+	if [ -d mocks ]; then find mocks -type f ! -name doc.go -delete && find mocks -type d -empty -delete; fi
+	# mockery v3 is configured via YAML instead of CLI flags. Two invocations are
+	# required (and must run in this order): `helpers/unithelper` imports the
+	# generated `mocks/core/...` packages, and v3 type-checks the sources it
+	# parses, so the core mocks have to exist before the helpers tree loads.
+	$(MOCKERY) --config .mockery.core.yml
+	$(MOCKERY) --config .mockery.helpers.yml
 
 test: unit-test e2e-test
 

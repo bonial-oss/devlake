@@ -18,9 +18,9 @@ limitations under the License.
 package tasks
 
 import (
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
 )
 
 func init() {
@@ -46,7 +46,7 @@ func CollectApiCommits(taskCtx plugin.SubTaskContext) errors.Error {
 		ApiClient:          data.ApiClient,
 		PageSize:           100,
 		Incremental:        false,
-		UrlTemplate:        "{{ .Params.OrganizationId }}/{{ .Params.ProjectId }}/_apis/git/repositories/{{ .Params.RepositoryId }}/commits?api-version=7.1",
+		UrlTemplate:        "{{ if .Params.OrganizationId }}{{ .Params.OrganizationId }}/{{ end }}{{ .Params.ProjectId }}/_apis/git/repositories/{{ .Params.RepositoryId }}/commits?api-version=7.1",
 		Query:              BuildPaginator(false),
 		ResponseParser:     ParseRawMessageFromValue,
 		AfterResponse:      change203To401,

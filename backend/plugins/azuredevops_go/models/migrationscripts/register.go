@@ -18,7 +18,7 @@ limitations under the License.
 package migrationscripts
 
 import (
-	"github.com/apache/incubator-devlake/core/plugin"
+	"github.com/apache/devlake/core/plugin"
 )
 
 // All return all the migration scripts
@@ -26,5 +26,8 @@ func All() []plugin.MigrationScript {
 	return []plugin.MigrationScript{
 		new(addInitTables),
 		new(extendRepoTable),
+		new(addEndpointToAzuredevops),
+		new(addUsernameToAzuredevops),
+		new(addRunNameToAzuredevopsBuild),
 	}
 }

@@ -19,10 +19,10 @@ package code
 
 import (
 	"fmt"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
+	"github.com/apache/devlake/core/models/domainlayer/ticket"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer"
 )
 
 const (
@@ -60,6 +60,9 @@ type PullRequest struct {
 	Additions      int
 	Deletions      int
 	IsDraft        bool
+	// SubProject is the monorepo sub-project this pull request was attributed to by the
+	// monorepo plugin, or empty/NULL when the project has no monorepo configuration.
+	SubProject string `gorm:"index;type:varchar(100)"`
 }
 
 func (PullRequest) TableName() string {

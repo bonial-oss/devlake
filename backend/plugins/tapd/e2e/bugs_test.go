@@ -20,12 +20,12 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/common"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/tapd/impl"
-	"github.com/apache/incubator-devlake/plugins/tapd/models"
-	"github.com/apache/incubator-devlake/plugins/tapd/tasks"
+	"github.com/apache/devlake/core/models/common"
+	"github.com/apache/devlake/core/models/domainlayer/ticket"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/tapd/impl"
+	"github.com/apache/devlake/plugins/tapd/models"
+	"github.com/apache/devlake/plugins/tapd/tasks"
 )
 
 func TestTapdBugDataFlow(t *testing.T) {
@@ -188,7 +188,11 @@ func TestTapdBugCustomizeDueDate(t *testing.T) {
 		},
 	}
 
+	dataflowTester.ImportCsvIntoTabler("./snapshot_tables/_tool_tapd_bug_statuses.csv", &models.TapdBugStatus{})
 	dataflowTester.FlushTabler(&models.TapdBug{})
+	dataflowTester.FlushTabler(&models.TapdWorkSpaceBug{})
+	dataflowTester.FlushTabler(&models.TapdIterationBug{})
+	dataflowTester.FlushTabler(&models.TapdBugLabel{})
 	// import raw data table
 	dataflowTester.ImportCsvIntoRawTable("./raw_tables/_raw_tapd_api_bugs_for_due_date.csv", "_raw_tapd_api_bugs")
 	dataflowTester.Subtask(tasks.ExtractBugMeta, taskData)
@@ -198,6 +202,9 @@ func TestTapdBugCustomizeDueDate(t *testing.T) {
 	})
 
 	dataflowTester.FlushTabler(&ticket.Issue{})
+	dataflowTester.FlushTabler(&ticket.BoardIssue{})
+	dataflowTester.FlushTabler(&ticket.SprintIssue{})
+	dataflowTester.FlushTabler(&ticket.IssueAssignee{})
 	dataflowTester.Subtask(tasks.ConvertBugMeta, taskData)
 	dataflowTester.VerifyTable(
 		ticket.Issue{},

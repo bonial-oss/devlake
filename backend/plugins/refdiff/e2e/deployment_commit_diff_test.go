@@ -20,13 +20,13 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/crossdomain"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/refdiff/impl"
-	"github.com/apache/incubator-devlake/plugins/refdiff/models"
-	"github.com/apache/incubator-devlake/plugins/refdiff/tasks"
+	"github.com/apache/devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/core/models/domainlayer/crossdomain"
+	"github.com/apache/devlake/core/models/domainlayer/devops"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/refdiff/impl"
+	"github.com/apache/devlake/plugins/refdiff/models"
+	"github.com/apache/devlake/plugins/refdiff/tasks"
 )
 
 func TestDeploymentCommitDiffDataFlow(t *testing.T) {
@@ -57,5 +57,13 @@ func TestDeploymentCommitDiffDataFlow(t *testing.T) {
 
 	dataflowTester.VerifyTableWithOptions(&models.FinishedCommitsDiff{}, e2ehelper.TableOptions{
 		CSVRelPath: "./deployment_commit_diff/_tool_refdiff_finished_commits_diffs.csv",
+	})
+
+	// a second run must not recalculate any finished pair, including deployments
+	// without a previous successful deployment (finished with an empty old sha)
+	dataflowTester.FlushTabler(&code.CommitsDiff{})
+	dataflowTester.Subtask(tasks.CalculateDeploymentCommitsDiffMeta, taskData)
+	dataflowTester.VerifyTableWithOptions(&code.CommitsDiff{}, e2ehelper.TableOptions{
+		CSVRelPath: "./deployment_commit_diff/commits_diffs_rerun.csv",
 	})
 }

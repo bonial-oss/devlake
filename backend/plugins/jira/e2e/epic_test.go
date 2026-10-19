@@ -20,11 +20,11 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/common"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/jira/impl"
-	"github.com/apache/incubator-devlake/plugins/jira/models"
-	"github.com/apache/incubator-devlake/plugins/jira/tasks"
+	"github.com/apache/devlake/core/models/common"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/jira/impl"
+	"github.com/apache/devlake/plugins/jira/models"
+	"github.com/apache/devlake/plugins/jira/tasks"
 
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +53,8 @@ func TestEpicDataflow(t *testing.T) {
 	dataflowTester.FlushTabler(&models.JiraAccount{})
 	dataflowTester.FlushTabler(&models.JiraIssueType{})
 	dataflowTester.FlushTabler(&models.JiraIssueComment{})
+	dataflowTester.FlushTabler(&models.JiraIssueLabel{})
+	dataflowTester.FlushTabler(&models.JiraIssueField{})
 
 	ctx := dataflowTester.SubtaskContext(taskData)
 

@@ -20,11 +20,11 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/tempo/impl"
-	"github.com/apache/incubator-devlake/plugins/tempo/models"
-	"github.com/apache/incubator-devlake/plugins/tempo/tasks"
+	"github.com/apache/devlake/core/models/domainlayer/ticket"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/tempo/impl"
+	"github.com/apache/devlake/plugins/tempo/models"
+	"github.com/apache/devlake/plugins/tempo/tasks"
 )
 
 func TestWorklogDataFlow(t *testing.T) {
@@ -44,6 +44,36 @@ func TestWorklogDataFlow(t *testing.T) {
 		ticket.IssueWorklog{},
 		"./snapshot_tables/issue_worklogs.csv",
 		[]string{"id", "author_id", "time_spent_minutes", "issue_id", "started_date", "logged_date"},
+	)
+}
+
+func TestWorklogExtraction(t *testing.T) {
+	var plugin impl.Tempo
+	dataflowTester := e2ehelper.NewDataFlowTester(t, "tempo", plugin)
+
+	taskData := &tasks.TempoTaskData{
+		Options: &tasks.TempoOptions{
+			ConnectionId: 1,
+			TeamId:       4,
+		},
+	}
+
+	dataflowTester.ImportCsvIntoRawTable("./raw_tables/_raw_tempo_api_worklogs.csv", "_raw_tempo_api_worklogs")
+	dataflowTester.FlushTabler(&models.TempoWorklog{})
+	dataflowTester.Subtask(tasks.ExtractWorklogsMeta, taskData)
+	dataflowTester.VerifyTable(
+		models.TempoWorklog{},
+		"./snapshot_tables/_tool_tempo_worklogs_extracted.csv",
+		e2ehelper.ColumnWithRawData(
+			"connection_id",
+			"tempo_worklog_id",
+			"team_id",
+			"issue_id",
+			"author_account_id",
+			"time_spent_seconds",
+			"start_date",
+			"start_time",
+		),
 	)
 }
 

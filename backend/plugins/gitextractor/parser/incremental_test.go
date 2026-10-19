@@ -20,7 +20,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/core/models/domainlayer/code"
 	"github.com/stretchr/testify/assert"
 )
 

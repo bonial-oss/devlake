@@ -18,7 +18,7 @@ limitations under the License.
 package devops
 
 import (
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer"
 	"time"
 )
 
@@ -28,8 +28,8 @@ type CicdRelease struct {
 
 	CicdScopeId string `gorm:"index;type:varchar(255)"`
 
-	Name         string `gorm:"type:varchar(255)"`
-	DisplayTitle string `gorm:"type:varchar(255)"`
+	Name         string `gorm:"type:text"`
+	DisplayTitle string `gorm:"type:text"`
 	Description  string `json:"description"`
 	URL          string `json:"url"`
 

@@ -49,6 +49,8 @@ export const getPluginScopeId = (plugin: string, scope: any) => {
       return `${scope.teamId}`;
     case 'clickup':
       return `${scope.folderId}`;
+    case 'youtrack':
+      return `${scope.id}`;
     default:
       return `${scope.id}`;
   }
@@ -85,6 +87,10 @@ export const getPluginScopeName = (plugin: string, scope: any) => {
       return `${rawId} (Enterprise + Organization)`;
     }
     return rawId;
+  }
+
+  if (plugin === 'gitlab') {
+    return `${scope.pathWithNamespace ?? scope.fullName ?? scope.name ?? scope.id ?? ''}`;
   }
 
   return `${scope.fullName ?? scope.name ?? scope.id ?? ''}`;

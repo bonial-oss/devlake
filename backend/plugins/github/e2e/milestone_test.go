@@ -20,11 +20,11 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/github/impl"
-	"github.com/apache/incubator-devlake/plugins/github/models"
-	"github.com/apache/incubator-devlake/plugins/github/tasks"
+	"github.com/apache/devlake/core/models/domainlayer/ticket"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/github/impl"
+	"github.com/apache/devlake/plugins/github/models"
+	"github.com/apache/devlake/plugins/github/tasks"
 )
 
 func TestMilestoneDataFlow(t *testing.T) {
@@ -52,6 +52,9 @@ func TestMilestoneDataFlow(t *testing.T) {
 
 	dataflowTester.FlushTabler(&models.GithubMilestone{})
 	dataflowTester.FlushTabler(&models.GithubIssue{})
+	dataflowTester.FlushTabler(&models.GithubIssueLabel{})
+	dataflowTester.FlushTabler(&models.GithubRepoAccount{})
+	dataflowTester.FlushTabler(&models.GithubIssueAssignee{})
 
 	// import raw data table
 	dataflowTester.ImportCsvIntoRawTable("./raw_tables/_raw_github_api_milestones.csv", "_raw_"+tasks.RAW_MILESTONE_TABLE)

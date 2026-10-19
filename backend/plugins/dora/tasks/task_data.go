@@ -18,8 +18,11 @@ limitations under the License.
 package tasks
 
 import (
-	"github.com/apache/incubator-devlake/core/errors"
-	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"regexp"
+	"strings"
+
+	"github.com/apache/devlake/core/errors"
+	helper "github.com/apache/devlake/helpers/pluginhelper/api"
 )
 
 type DoraApiParams struct {
@@ -31,11 +34,15 @@ type DoraOptions struct {
 	Since       string
 	ProjectName string  `json:"projectName"`
 	ScopeId     *string `json:"scopeId,omitempty"`
+	// PrHeadRefPattern is a Go RE2 regex; when set, only merged pull requests whose
+	// source branch (head_ref) matches it are counted by calculateChangeLeadTime.
+	PrHeadRefPattern string `json:"prHeadRefPattern,omitempty"`
 }
 
 type DoraTaskData struct {
 	Options                         *DoraOptions
 	DisableIssueToIncidentGenerator bool
+	PrHeadRefRegexp                 *regexp.Regexp
 }
 
 func DecodeAndValidateTaskOptions(options map[string]interface{}) (*DoraOptions, errors.Error) {
@@ -46,4 +53,27 @@ func DecodeAndValidateTaskOptions(options map[string]interface{}) (*DoraOptions,
 	}
 
 	return &op, nil
+}
+
+// CompilePrHeadRefPattern compiles the prHeadRefPattern option.
+// A blank pattern means no filtering and yields a nil regexp.
+func CompilePrHeadRefPattern(pattern string) (*regexp.Regexp, errors.Error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return nil, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, errors.BadInput.Wrap(err, "invalid prHeadRefPattern")
+	}
+	return re, nil
+}
+
+// MatchPrHeadRef reports whether a pull request source branch matches the pattern.
+// A nil regexp matches everything. The "refs/heads/" prefix is ignored.
+func MatchPrHeadRef(re *regexp.Regexp, headRef string) bool {
+	if re == nil {
+		return true
+	}
+	return re.MatchString(strings.TrimPrefix(headRef, "refs/heads/"))
 }

@@ -19,14 +19,14 @@ package tasks
 
 import (
 	"encoding/json"
-	"github.com/apache/incubator-devlake/plugins/azuredevops_go/models"
+	"github.com/apache/devlake/plugins/azuredevops_go/models"
 	"net/url"
 	"strconv"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
 )
 
 func init() {
@@ -63,7 +63,7 @@ func CollectBuilds(taskCtx plugin.SubTaskContext) errors.Error {
 			GetNextPageCustomData: ExtractContToken,
 			PageSize:              100,
 			FinalizableApiCollectorCommonArgs: api.FinalizableApiCollectorCommonArgs{
-				UrlTemplate: "{{ .Params.OrganizationId }}/{{ .Params.ProjectId }}/_apis/build/builds?api-version=7.1",
+				UrlTemplate: "{{ if .Params.OrganizationId }}{{ .Params.OrganizationId }}/{{ end }}{{ .Params.ProjectId }}/_apis/build/builds?api-version=7.1",
 				Query: func(reqData *api.RequestData, createdAfter *time.Time) (url.Values, errors.Error) {
 					query := url.Values{}
 					query.Set("repositoryType", repoType)

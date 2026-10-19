@@ -22,13 +22,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/helpers/utils"
-	"github.com/apache/incubator-devlake/plugins/jira/models"
-	"github.com/apache/incubator-devlake/plugins/jira/tasks/apiv2models"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/helpers/utils"
+	"github.com/apache/devlake/plugins/jira/models"
+	"github.com/apache/devlake/plugins/jira/tasks/apiv2models"
 )
 
 var _ plugin.SubTaskEntryPoint = ExtractIssues
@@ -74,6 +74,7 @@ func ExtractIssues(subtaskCtx plugin.SubTaskContext) errors.Error {
 				"typeMappings":    mappings,
 				"storyPointField": data.Options.ScopeConfig.StoryPointField,
 				"dueDateField":    data.Options.ScopeConfig.DueDateField,
+				"epicKeyField":    data.Options.ScopeConfig.EpicKeyField,
 			},
 		},
 		BeforeExtract: func(apiIssue *apiv2models.Issue, stateManager *api.SubtaskStateManager) errors.Error {
@@ -144,6 +145,23 @@ func extractIssues(data *JiraTaskData, mappings *typeMappings, apiIssue *apiv2mo
 			issue.StoryPoint = &temp
 		}
 
+	}
+	// Honor the configured epic/parent-link custom field. Jira Cloud and
+	// company-managed projects often store the epic key there instead of the
+	// legacy fields.epic object. Leave EpicKey unchanged when the field is unset
+	// so the standard epic mapping from toToolLayer still applies.
+	if data.Options.ScopeConfig != nil && data.Options.ScopeConfig.EpicKeyField != "" {
+		unknownEpicKey := apiIssue.Fields.AllFields[data.Options.ScopeConfig.EpicKeyField]
+		switch ek := unknownEpicKey.(type) {
+		case string:
+			issue.EpicKey = ek
+		case map[string]interface{}:
+			if key, ok := ek["key"].(string); ok {
+				issue.EpicKey = key
+			}
+		case nil:
+			// Field is not set; keep EpicKey from the standard epic field.
+		}
 	}
 	// default due date field is "duedate"
 	dueDateField := "duedate"

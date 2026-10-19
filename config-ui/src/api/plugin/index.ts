@@ -21,6 +21,7 @@ import { request } from '@/utils';
 import * as jira from './jira';
 import * as tapd from './tapd';
 import * as webhook from './webhook';
+import * as youtrack from './youtrack';
 
 export const list = (): Promise<[{ plugin: string }]> => request('/plugins');
 
@@ -29,6 +30,7 @@ export const plugin = {
   jira,
   tapd,
   webhook,
+  youtrack,
 };
 
 export default plugin;

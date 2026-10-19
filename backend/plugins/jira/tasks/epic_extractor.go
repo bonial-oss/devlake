@@ -18,13 +18,13 @@ limitations under the License.
 package tasks
 
 import (
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/log"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/jira/models"
-	"github.com/apache/incubator-devlake/plugins/jira/tasks/apiv2models"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/log"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/jira/models"
+	"github.com/apache/devlake/plugins/jira/tasks/apiv2models"
 )
 
 var _ plugin.SubTaskEntryPoint = ExtractEpics
@@ -103,8 +103,11 @@ func getIssueFieldMap(db dal.Dal, connectionId uint64, logger log.Logger) (map[s
 	}
 	issueFieldMap := make(map[string]models.JiraIssueField)
 	for _, v := range allIssueFields {
-		if _, ok := issueFieldMap[v.Name]; ok {
-			logger.Warn(nil, "filed name %s is duplicated", v.Name)
+		if existing, ok := issueFieldMap[v.Name]; ok {
+			// Same field can appear on multiple boards; only warn on a real name collision.
+			if existing.ID != v.ID {
+				logger.Warn(nil, "field name %s is duplicated (IDs: %s, %s)", v.Name, existing.ID, v.ID)
+			}
 			if v.SchemaType == "user" {
 				issueFieldMap[v.Name] = v
 			}

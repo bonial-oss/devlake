@@ -20,11 +20,11 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/crossdomain"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/jira/impl"
-	"github.com/apache/incubator-devlake/plugins/jira/models"
-	"github.com/apache/incubator-devlake/plugins/jira/tasks"
+	"github.com/apache/devlake/core/models/domainlayer/crossdomain"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/jira/impl"
+	"github.com/apache/devlake/plugins/jira/models"
+	"github.com/apache/devlake/plugins/jira/tasks"
 )
 
 func TestConvertIssueRepoCommitsDataFlow(t *testing.T) {
@@ -38,9 +38,9 @@ func TestConvertIssueRepoCommitsDataFlow(t *testing.T) {
 			ScopeConfig: &models.JiraScopeConfig{
 				RemotelinkCommitShaPattern: `.*/commit/(.*)`,
 				RemotelinkRepoPattern: []models.CommitUrlPattern{
-					{"", `https://bitbucket.org/(?P<namespace>[^/]+)/(?P<repo_name>[^/]+)/commits/(?P<commit_sha>\w{40})`},
-					{"", `https://gitlab.com/(?P<namespace>\S+)/(?P<repo_name>\S+)/-/commit/(?P<commit_sha>\w{40})`},
-					{"", `https://github.com/(?P<namespace>[^/]+)/(?P<repo_name>[^/]+)/commit/(?P<commit_sha>\w{40})`},
+					{Pattern: "", Regex: `https://bitbucket.org/(?P<namespace>[^/]+)/(?P<repo_name>[^/]+)/commits/(?P<commit_sha>\w{40})`},
+					{Pattern: "", Regex: `https://gitlab.com/(?P<namespace>\S+)/(?P<repo_name>\S+)/-/commit/(?P<commit_sha>\w{40})`},
+					{Pattern: "", Regex: `https://github.com/(?P<namespace>[^/]+)/(?P<repo_name>[^/]+)/commit/(?P<commit_sha>\w{40})`},
 				},
 			},
 		},

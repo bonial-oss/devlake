@@ -20,11 +20,11 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/gitlab/impl"
-	"github.com/apache/incubator-devlake/plugins/gitlab/models"
-	"github.com/apache/incubator-devlake/plugins/gitlab/tasks"
+	"github.com/apache/devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/gitlab/impl"
+	"github.com/apache/devlake/plugins/gitlab/models"
+	"github.com/apache/devlake/plugins/gitlab/tasks"
 )
 
 func TestGitlabMrNoteDataFlow(t *testing.T) {
@@ -46,6 +46,8 @@ func TestGitlabMrNoteDataFlow(t *testing.T) {
 	// verify extraction
 	dataflowTester.FlushTabler(&models.GitlabMergeRequest{})
 	dataflowTester.FlushTabler(&models.GitlabMrLabel{})
+	dataflowTester.FlushTabler(&models.GitlabReviewer{})
+	dataflowTester.FlushTabler(&models.GitlabAssignee{})
 	dataflowTester.Subtask(tasks.ExtractApiMergeRequestsMeta, taskData)
 	dataflowTester.VerifyTable(
 		models.GitlabMergeRequest{},

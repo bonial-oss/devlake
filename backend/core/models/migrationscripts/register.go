@@ -18,7 +18,7 @@ limitations under the License.
 package migrationscripts
 
 import (
-	plugin "github.com/apache/incubator-devlake/core/plugin"
+	plugin "github.com/apache/devlake/core/plugin"
 )
 
 // All return all the migration scripts of framework
@@ -148,8 +148,14 @@ func All() []plugin.MigrationScript {
 		new(changeIssueComponentToText),
 		new(changeCqIssueCodeBlocksComponentToText),
 		new(addCqProjectMetricsHistory),
+		new(addIsBotToAccounts),
 		new(addSprintVelocityFields),
 		new(addIsAuthoredByBotToProjectPrMetric),
 		new(addDoraPerformanceIndexes),
+		new(addSubProjectToPrAndMetrics),
+		new(addCicdDeploymentSubprojects),
+		new(backfillSubProjectFromMonorepo),
+		new(addBlueprintIdIndexToPipelines),
+		new(expandDomainTextColumns),
 	}
 }

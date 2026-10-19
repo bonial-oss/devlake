@@ -28,13 +28,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/helpers/unithelper"
-	mockdal "github.com/apache/incubator-devlake/mocks/core/dal"
-	mockapi "github.com/apache/incubator-devlake/mocks/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/github/models"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	helper "github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/helpers/unithelper"
+	mockdal "github.com/apache/devlake/mocks/core/dal"
+	mockapi "github.com/apache/devlake/mocks/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/github/models"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -87,6 +87,58 @@ func TestCicdRunLoadLatestRunUpdatedAt_PropagatesError(t *testing.T) {
 	since, err := loadLatestRunUpdatedAt(ctx, 1, 101)
 
 	assert.Nil(t, since)
+	require.NotNil(t, err)
+	assert.Contains(t, err.Error(), "db unavailable")
+	mockDal.AssertExpectations(t)
+}
+
+func TestCicdRunLoadOldestUnfinishedRunCreatedAt_ReturnsOldestTimestamp(t *testing.T) {
+	connectionId := uint64(1)
+	repoId := 101
+	oldestTs := time.Date(2025, 4, 1, 10, 11, 12, 0, time.UTC)
+
+	mockDal := new(mockdal.Dal)
+	mockDal.On("First", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		dst := args.Get(0).(*models.GithubRun)
+		dst.ConnectionId = connectionId
+		dst.RepoId = repoId
+		dst.Status = "in_progress"
+		dst.GithubCreatedAt = &oldestTs
+	}).Return(nil).Once()
+
+	ctx := unithelper.DummySubTaskContext(mockDal)
+	created, err := loadOldestUnfinishedRunCreatedAt(ctx, connectionId, repoId, 14*24*time.Hour)
+
+	require.Nil(t, err)
+	require.NotNil(t, created)
+	assert.True(t, created.Equal(oldestTs))
+	mockDal.AssertExpectations(t)
+}
+
+func TestCicdRunLoadOldestUnfinishedRunCreatedAt_NotFoundReturnsNil(t *testing.T) {
+	mockDal := new(mockdal.Dal)
+	notFoundErr := errors.Default.New("record not found")
+	mockDal.On("First", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(notFoundErr).Once()
+	mockDal.On("IsErrorNotFound", notFoundErr).Return(true).Once()
+
+	ctx := unithelper.DummySubTaskContext(mockDal)
+	created, err := loadOldestUnfinishedRunCreatedAt(ctx, 1, 101, 14*24*time.Hour)
+
+	require.Nil(t, err)
+	assert.Nil(t, created)
+	mockDal.AssertExpectations(t)
+}
+
+func TestCicdRunLoadOldestUnfinishedRunCreatedAt_PropagatesError(t *testing.T) {
+	mockDal := new(mockdal.Dal)
+	dbErr := errors.Default.New("db unavailable")
+	mockDal.On("First", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(dbErr).Once()
+	mockDal.On("IsErrorNotFound", dbErr).Return(false).Once()
+
+	ctx := unithelper.DummySubTaskContext(mockDal)
+	created, err := loadOldestUnfinishedRunCreatedAt(ctx, 1, 101, 14*24*time.Hour)
+
+	assert.Nil(t, created)
 	require.NotNil(t, err)
 	assert.Contains(t, err.Error(), "db unavailable")
 	mockDal.AssertExpectations(t)
@@ -503,7 +555,7 @@ func TestCicdRunRegisterCollectorForLeafWindows_SingleDelete(t *testing.T) {
 		Ctx: mockCtx,
 		Params: GithubApiParams{
 			ConnectionId: 1,
-			Name:         "apache/incubator-devlake",
+			Name:         "apache/devlake",
 		},
 		Table: RAW_RUN_TABLE,
 	})

@@ -22,10 +22,16 @@ export interface IPluginConfig {
   icon: ({ color }: { color: string }) => React.ReactNode;
   sort: number;
   isBeta?: boolean;
+  isDeprecated?: boolean;
+  deprecationMessage?: string;
   connection: {
     docLink: string;
     initialValues?: Record<string, any>;
     fields: any[];
+    // when true, a successful Test Connection shows the message returned by
+    // the plugin's test API (e.g. the authenticated login, soft warnings)
+    // instead of the generic toast
+    showTestResultMessage?: boolean;
   };
   dataScope: {
     localSearch?: boolean;

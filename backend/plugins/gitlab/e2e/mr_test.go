@@ -20,12 +20,12 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/common"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/gitlab/impl"
-	"github.com/apache/incubator-devlake/plugins/gitlab/models"
-	"github.com/apache/incubator-devlake/plugins/gitlab/tasks"
+	"github.com/apache/devlake/core/models/common"
+	"github.com/apache/devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/gitlab/impl"
+	"github.com/apache/devlake/plugins/gitlab/models"
+	"github.com/apache/devlake/plugins/gitlab/tasks"
 )
 
 func TestGitlabMrDataFlow(t *testing.T) {
@@ -47,6 +47,8 @@ func TestGitlabMrDataFlow(t *testing.T) {
 	// verify extraction
 	dataflowTester.FlushTabler(&models.GitlabMergeRequest{})
 	dataflowTester.FlushTabler(&models.GitlabMrLabel{})
+	dataflowTester.FlushTabler(&models.GitlabReviewer{})
+	dataflowTester.FlushTabler(&models.GitlabAssignee{})
 	dataflowTester.Subtask(tasks.ExtractApiMergeRequestsMeta, taskData)
 	dataflowTester.VerifyTableWithOptions(&models.GitlabMergeRequest{}, e2ehelper.TableOptions{
 		CSVRelPath:  "./snapshot_tables/_tool_gitlab_merge_requests.csv",
@@ -59,6 +61,9 @@ func TestGitlabMrDataFlow(t *testing.T) {
 
 	// verify conversion
 	dataflowTester.FlushTabler(&code.PullRequest{})
+	dataflowTester.FlushTabler(&code.PullRequestAssignee{})
+	dataflowTester.FlushTabler(&code.PullRequestReviewer{})
+	dataflowTester.FlushTabler(&code.PullRequestLabel{})
 	dataflowTester.Subtask(tasks.ConvertApiMergeRequestsMeta, taskData)
 	dataflowTester.VerifyTableWithOptions(&code.PullRequest{}, e2ehelper.TableOptions{
 		CSVRelPath:  "./snapshot_tables/pull_requests.csv",

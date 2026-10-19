@@ -20,7 +20,7 @@ package models
 import (
 	"time"
 
-	"github.com/apache/incubator-devlake/core/models/common"
+	"github.com/apache/devlake/core/models/common"
 )
 
 type GenericPipelineTask[T any] struct {
@@ -54,7 +54,7 @@ func (plan PipelinePlan) IsEmpty() bool {
 type Pipeline struct {
 	common.Model
 	Name          string       `json:"name" gorm:"index"`
-	BlueprintId   uint64       `json:"blueprintId"`
+	BlueprintId   uint64       `json:"blueprintId" gorm:"index"`
 	Plan          PipelinePlan `json:"plan" gorm:"serializer:encdec"`
 	TotalTasks    int          `json:"totalTasks"`
 	FinishedTasks int          `json:"finishedTasks"`

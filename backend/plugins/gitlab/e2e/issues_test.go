@@ -20,11 +20,11 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/gitlab/impl"
-	"github.com/apache/incubator-devlake/plugins/gitlab/models"
-	"github.com/apache/incubator-devlake/plugins/gitlab/tasks"
+	"github.com/apache/devlake/core/models/domainlayer/ticket"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/gitlab/impl"
+	"github.com/apache/devlake/plugins/gitlab/models"
+	"github.com/apache/devlake/plugins/gitlab/tasks"
 )
 
 func TestGitlabIssueDataFlow(t *testing.T) {
@@ -92,6 +92,8 @@ func TestGitlabIssueDataFlow(t *testing.T) {
 	// verify conversion
 	dataflowTester.FlushTabler(&ticket.Issue{})
 	dataflowTester.FlushTabler(&ticket.BoardIssue{})
+	dataflowTester.FlushTabler(&ticket.IssueLabel{})
+	dataflowTester.FlushTabler(&ticket.IssueAssignee{})
 	dataflowTester.Subtask(tasks.ConvertIssuesMeta, taskData)
 	dataflowTester.VerifyTable(
 		ticket.Issue{},

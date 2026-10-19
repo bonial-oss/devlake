@@ -49,7 +49,7 @@ RUN if [ "$(arch)" != "x86_64" ] ; then \
         apt-get install -y gcc-x86-64-linux-gnu binutils-x86-64-linux-gnu ; \
     fi
 
-RUN go install github.com/vektra/mockery/v2@v2.53.6
+RUN go install github.com/vektra/mockery/v3@v3.8.1
 RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 COPY --from=debian-amd64 /usr/include /rootfs-amd64/usr/include
@@ -61,18 +61,21 @@ COPY --from=debian-arm64 /usr/lib/aarch64-linux-gnu /rootfs-arm64/usr/lib/aarch6
 COPY --from=debian-arm64 /lib/aarch64-linux-gnu /rootfs-arm64/lib/aarch64-linux-gnu
 
 
-RUN for arch in aarch64 x86_64 ; do \
+# set -e: otherwise a build failure for one arch is silently skipped and the
+# other arch's libgit2 is never installed under /usr/local/deps.
+RUN set -e; \
+    for arch in aarch64 x86_64 ; do \
         mkdir -p /tmp/build/${arch} && cd /tmp/build/${arch} && \
         wget https://github.com/libgit2/libgit2/archive/refs/tags/v1.5.0.tar.gz -O - | tar -xz && \
         cd libgit2-1.5.0 && \
         mkdir build && cd build && \
         if [ "$arch" = "aarch64" ] ; then \
             cmake .. -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-                -DBUILD_SHARED_LIBS=ON -DCMAKE_SYSROOT=/rootfs-arm64 \
+                -DBUILD_SHARED_LIBS=ON -DUSE_BUNDLED_ZLIB=ON -DCMAKE_SYSROOT=/rootfs-arm64 \
                 -DCMAKE_INSTALL_PREFIX=/usr/local/deps/${arch} ; \
         elif [ "$arch" = "x86_64" ] ; then \
             cmake .. -DCMAKE_C_COMPILER=x86_64-linux-gnu-gcc \
-                -DBUILD_SHARED_LIBS=ON -DCMAKE_SYSROOT=/rootfs-amd64 \
+                -DBUILD_SHARED_LIBS=ON -DUSE_BUNDLED_ZLIB=ON -DCMAKE_SYSROOT=/rootfs-amd64 \
                 -DCMAKE_INSTALL_PREFIX=/usr/local/deps/${arch} ; \
         fi && \
         make -j install ; \

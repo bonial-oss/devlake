@@ -31,16 +31,16 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"github.com/swaggo/swag"
 
-	"github.com/apache/incubator-devlake/core/context"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/impls/logruslog"
-	"github.com/apache/incubator-devlake/server/api/auth"
-	_ "github.com/apache/incubator-devlake/server/api/docs"
-	"github.com/apache/incubator-devlake/server/api/ping"
-	"github.com/apache/incubator-devlake/server/api/shared"
-	"github.com/apache/incubator-devlake/server/api/version"
-	"github.com/apache/incubator-devlake/server/services"
+	"github.com/apache/devlake/core/context"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/impls/logruslog"
+	"github.com/apache/devlake/server/api/auth"
+	_ "github.com/apache/devlake/server/api/docs"
+	"github.com/apache/devlake/server/api/ping"
+	"github.com/apache/devlake/server/api/shared"
+	"github.com/apache/devlake/server/api/version"
+	"github.com/apache/devlake/server/services"
 )
 
 const DB_MIGRATION_REQUIRED = `
@@ -130,9 +130,11 @@ func SetupApiServer(router *gin.Engine) {
 	// Endpoint to proceed database migration — listed in auth.publicPaths because
 	// auth tables may not exist yet when migration is pending.
 	router.GET("/proceed-db-migration", func(ctx *gin.Context) {
-		// Execute database migration
-		errors.Must(services.ExecuteMigration())
-		// Return success response
+		// Surface the real migration error to the client instead of a bare 500.
+		if err := services.ExecuteMigration(); err != nil {
+			shared.ApiOutputError(ctx, err)
+			return
+		}
 		shared.ApiOutputSuccess(ctx, nil, http.StatusOK)
 	})
 

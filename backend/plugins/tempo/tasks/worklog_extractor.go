@@ -20,10 +20,10 @@ package tasks
 import (
 	"encoding/json"
 
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/tempo/models"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/tempo/models"
 )
 
 var ExtractWorklogsMeta = plugin.SubTaskMeta{
@@ -61,6 +61,7 @@ func ExtractWorklogs(taskCtx plugin.SubTaskContext) errors.Error {
 			Ctx: taskCtx,
 			Params: models.TempoApiParams{
 				ConnectionId: data.Options.ConnectionId,
+				TeamId:       data.Options.TeamId,
 			},
 			Table: RAW_WORKLOG_TABLE,
 		},
@@ -74,6 +75,7 @@ func ExtractWorklogs(taskCtx plugin.SubTaskContext) errors.Error {
 			worklog := &models.TempoWorklog{
 				ConnectionId:     data.Options.ConnectionId,
 				TempoWorklogId:   apiWorklog.TempoWorklogId,
+				TeamId:           data.Options.TeamId,
 				IssueId:          apiWorklog.Issue.Id,
 				TimeSpentSeconds: apiWorklog.TimeSpentSeconds,
 				BillableSeconds:  apiWorklog.BillableSeconds,

@@ -19,10 +19,11 @@ package tasks
 
 import (
 	"encoding/json"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/azuredevops_go/models"
+
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/azuredevops_go/models"
 )
 
 func init() {
@@ -70,6 +71,7 @@ func ExtractApiBuilds(taskCtx plugin.SubTaskContext) errors.Error {
 				Status:        buildApi.Status,
 				Result:        buildApi.Result,
 				Name:          buildApi.Definition.Name,
+				RunName:       buildApi.BuildNumber,
 				SourceBranch:  buildApi.SourceBranch,
 				SourceVersion: buildApi.SourceVersion,
 				QueueTime:     buildApi.QueueTime,

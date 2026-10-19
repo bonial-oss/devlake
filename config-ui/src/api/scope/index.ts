@@ -38,17 +38,17 @@ export const list = (
   });
 
 export const get = (plugin: string, connectionId: ID, scopeId: ID, payload?: { blueprints: boolean }) =>
-  request(`/plugins/${plugin}/connections/${connectionId}/scopes/${scopeId}`, {
+  request(`/plugins/${plugin}/connections/${connectionId}/scopes/${encodeURIComponent(scopeId)}`, {
     data: payload,
   });
 
 export const remove = (plugin: string, connectionId: ID, scopeId: ID, onlyData: boolean) =>
-  request(`/plugins/${plugin}/connections/${connectionId}/scopes/${scopeId}?delete_data_only=${onlyData}`, {
+  request(`/plugins/${plugin}/connections/${connectionId}/scopes/${encodeURIComponent(scopeId)}?delete_data_only=${onlyData}`, {
     method: 'delete',
   });
 
 export const update = (plugin: string, connectionId: ID, scopeId: ID, payload: any) =>
-  request(`/plugins/${plugin}/connections/${connectionId}/scopes/${scopeId}`, {
+  request(`/plugins/${plugin}/connections/${connectionId}/scopes/${encodeURIComponent(scopeId)}`, {
     method: 'patch',
     data: payload,
   });
@@ -102,21 +102,27 @@ export type ScopeDuplicateConnection = {
   connectionName: string;
 };
 
+// The plugin-specific id field (githubId/gitlabId/bitbucketId) is intentionally
+// omitted here since the UI only ever needs `htmlUrl`/`fullName`/`connections`.
 export type ScopeDuplicateGroup = {
-  githubId: number;
   htmlUrl: string;
   fullName: string;
   connections: ScopeDuplicateConnection[];
 };
 
+// The query param that carries the comma-separated scope ids is named differently per
+// plugin (githubIds/gitlabIds/bitbucketIds), so callers pass it in via `idsParam`.
 export const scopeDuplicates = (
   plugin: string,
   data?: {
     connectionId?: ID;
-    githubIds?: string;
+    idsParam?: string;
+    ids?: string;
   },
-): Promise<{ duplicates: ScopeDuplicateGroup[] }> =>
-  request(`/plugins/${plugin}/scope-duplicates`, {
+): Promise<{ duplicates: ScopeDuplicateGroup[] }> => {
+  const { idsParam, ids, ...rest } = data ?? {};
+  return request(`/plugins/${plugin}/scope-duplicates`, {
     method: 'get',
-    data,
+    data: idsParam && ids !== undefined ? { ...rest, [idsParam]: ids } : rest,
   });
+};

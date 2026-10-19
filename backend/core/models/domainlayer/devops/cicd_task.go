@@ -18,7 +18,7 @@ limitations under the License.
 package devops
 
 import (
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer"
 )
 
 const (
@@ -38,7 +38,7 @@ const ENV_NAME_PATTERN = "ENV_NAME_PATTERN"
 
 type CICDTask struct {
 	domainlayer.DomainEntity
-	Name              string `gorm:"type:varchar(255)"`
+	Name              string `gorm:"type:text"`
 	PipelineId        string `gorm:"index;type:varchar(255)"`
 	Result            string `gorm:"type:varchar(100)"`
 	Status            string `gorm:"type:varchar(100)"`

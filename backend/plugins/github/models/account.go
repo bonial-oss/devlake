@@ -18,15 +18,15 @@ limitations under the License.
 package models
 
 import (
-	"github.com/apache/incubator-devlake/core/models/common"
+	"github.com/apache/devlake/core/models/common"
 )
 
 type GithubAccount struct {
 	ConnectionId uint64 `gorm:"primaryKey"`
 	Id           int    `json:"id" gorm:"primaryKey;autoIncrement:false"`
 	Login        string `json:"login" gorm:"type:varchar(255)"`
-	Name         string `json:"name" gorm:"type:varchar(255)"`
-	Company      string `json:"company" gorm:"type:varchar(255)"`
+	Name         string `json:"name" gorm:"type:text"`
+	Company      string `json:"company" gorm:"type:text"`
 	Email        string `json:"Email" gorm:"type:varchar(255)"`
 	AvatarUrl    string `json:"avatar_url" gorm:"type:varchar(255)"`
 	Url          string `json:"url" gorm:"type:varchar(255)"`

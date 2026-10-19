@@ -18,14 +18,14 @@ limitations under the License.
 package tasks
 
 import (
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/didgen"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/gitlab/models"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/core/models/domainlayer/didgen"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/gitlab/models"
 )
 
 func init() {
@@ -99,6 +99,7 @@ func ConvertApiMergeRequests(subtaskCtx plugin.SubTaskContext) errors.Error {
 				HeadRef:        gitlabMr.SourceBranch,
 				BaseRef:        gitlabMr.TargetBranch,
 				Component:      gitlabMr.Component,
+				IsDraft:        gitlabMr.WorkInProgress,
 			}
 			switch gitlabMr.State {
 			case "opened":

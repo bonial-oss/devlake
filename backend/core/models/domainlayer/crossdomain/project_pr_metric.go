@@ -20,7 +20,7 @@ package crossdomain
 import (
 	"time"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer"
 )
 
 type ProjectPrMetric struct {
@@ -42,6 +42,11 @@ type ProjectPrMetric struct {
 	PrDeployedDate          *time.Time
 
 	IsAuthoredByBot bool
+
+	// SubProject mirrors pull_requests.sub_project, tagged by the monorepo plugin's
+	// updateProjectPrMetricsSubProject subtask after DORA computes this row. Empty/NULL
+	// when the project has no monorepo configuration.
+	SubProject string `gorm:"index;type:varchar(100)"`
 }
 
 func (ProjectPrMetric) TableName() string {

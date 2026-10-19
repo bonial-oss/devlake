@@ -18,7 +18,7 @@ limitations under the License.
 package models
 
 import (
-	"github.com/apache/incubator-devlake/core/models/common"
+	"github.com/apache/devlake/core/models/common"
 	"time"
 )
 
@@ -31,6 +31,7 @@ type AzuredevopsBuild struct {
 	Status        string
 	Result        string
 	Name          string
+	RunName       string
 	SourceBranch  string
 	SourceVersion string
 	// Tags is a string version of the APIs tags array that helps to identify

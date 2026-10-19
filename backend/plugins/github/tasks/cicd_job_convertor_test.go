@@ -22,11 +22,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer/devops"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/didgen"
-	"github.com/apache/incubator-devlake/core/plugin"
-	mockplugin "github.com/apache/incubator-devlake/mocks/core/plugin"
-	"github.com/apache/incubator-devlake/plugins/github/models"
+	"github.com/apache/devlake/core/models/domainlayer/devops"
+	"github.com/apache/devlake/core/models/domainlayer/didgen"
+	"github.com/apache/devlake/core/plugin"
+	mockplugin "github.com/apache/devlake/mocks/core/plugin"
+	"github.com/apache/devlake/plugins/github/models"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -41,12 +41,12 @@ func GenJobID() {
 	connectionId := uint64(1)
 	runId := 1
 	lineId := 1
-	fmt.Sprintf("GithubJob:%d:%d:%d", connectionId, runId, lineId)
+	_ = fmt.Sprintf("GithubJob:%d:%d:%d", connectionId, runId, lineId)
 }
 
 func BenchmarkGenJobIDWithReflect(b *testing.B) {
 	mockMeta := mockplugin.NewPluginMeta(b)
-	mockMeta.On("RootPkgPath").Return("github.com/apache/incubator-devlake/plugins/github")
+	mockMeta.On("RootPkgPath").Return("github.com/apache/devlake/plugins/github")
 	mockMeta.On("Name").Return("github").Maybe()
 	err := plugin.RegisterPlugin("github", mockMeta)
 	assert.NoError(b, err)
