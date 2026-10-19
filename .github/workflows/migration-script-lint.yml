@@ -29,7 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     container: mericodev/lake-builder:latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+      - name: Install Go 1.26.9
+        run: backend/scripts/install-go.sh
       - name: migration script linting
         run: |
           go version

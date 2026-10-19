@@ -25,10 +25,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/tempo/models"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/tempo/models"
 )
 
 var CollectWorklogsMeta = plugin.SubTaskMeta{
@@ -42,13 +42,19 @@ var CollectWorklogsMeta = plugin.SubTaskMeta{
 func CollectWorklogs(taskCtx plugin.SubTaskContext) errors.Error {
 	data := taskCtx.GetData().(*TempoTaskData)
 
-	apiCollector, err := api.NewStatefulApiCollector(api.RawDataSubTaskArgs{
+	// Scope raw data and collector state per team, like the scope itself
+	// (TempoTeam.GetParams): otherwise every team scope of a connection shares
+	// one collector state, and the second team collected in a pipeline would
+	// run incrementally from the first team's start time.
+	rawDataSubTaskArgs := api.RawDataSubTaskArgs{
 		Ctx: taskCtx,
 		Params: models.TempoApiParams{
 			ConnectionId: data.Options.ConnectionId,
+			TeamId:       data.Options.TeamId,
 		},
 		Table: RAW_WORKLOG_TABLE,
-	})
+	}
+	apiCollector, err := api.NewStatefulApiCollector(rawDataSubTaskArgs)
 	if err != nil {
 		return err
 	}
@@ -58,61 +64,19 @@ func CollectWorklogs(taskCtx plugin.SubTaskContext) errors.Error {
 		urlTemplate = fmt.Sprintf("worklogs/team/%d", data.Options.TeamId)
 	}
 
+	// one period end for every page, even if the collection crosses midnight
+	startedAt := time.Now()
 	err = apiCollector.InitCollector(api.ApiCollectorArgs{
-		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
-			Ctx: taskCtx,
-			Params: models.TempoApiParams{
-				ConnectionId: data.Options.ConnectionId,
-			},
-			Table: RAW_WORKLOG_TABLE,
-		},
-		ApiClient:   data.ApiClient,
-		UrlTemplate: urlTemplate,
-		PageSize:    1000,
-		GetTotalPages: func(res *http.Response, args *api.ApiCollectorArgs) (int, errors.Error) {
-			var response struct {
-				Metadata struct {
-					Count  int `json:"count"`
-					Limit  int `json:"limit"`
-					Total  int `json:"total"`
-					Offset int `json:"offset"`
-				} `json:"metadata"`
-			}
-			if err := api.UnmarshalResponse(res, &response); err != nil {
-				return 0, err
-			}
-			totalPages := (response.Metadata.Total + args.PageSize - 1) / args.PageSize
-			return totalPages, nil
-		},
+		RawDataSubTaskArgs: rawDataSubTaskArgs,
+		ApiClient:          data.ApiClient,
+		UrlTemplate:        urlTemplate,
+		PageSize:           1000,
+		// No GetTotalPages: Tempo v4 pagination metadata (PageableMetadata)
+		// has count/offset/limit/next/previous but no total, so pages are
+		// fetched until one comes back short.
 		Query: func(reqData *api.RequestData) (url.Values, errors.Error) {
-			query := url.Values{}
-			pager := reqData.Pager
-			if pager == nil {
-				pager = &api.Pager{Page: 1, Skip: 0, Size: 1000}
-			}
-			query.Set("offset", strconv.Itoa(pager.Skip))
-			query.Set("limit", strconv.Itoa(pager.Size))
-
-			if data.Options.TeamId != 0 {
-				fromDate := data.Options.FromDate
-				toDate := data.Options.ToDate
-				if fromDate == "" {
-					since := time.Now().AddDate(0, 0, -90)
-					fromDate = since.Format("2006-01-02")
-				}
-				if toDate == "" {
-					toDate = time.Now().Format("2006-01-02")
-				}
-				query.Set("from", fromDate)
-				query.Set("to", toDate)
-			} else {
-				if apiCollector.IsIncremental() && apiCollector.GetSince() != nil {
-					since := apiCollector.GetSince()
-					query.Set("updatedFrom", since.Format(time.RFC3339))
-				}
-			}
-
-			return query, nil
+			return buildWorklogQuery(data.Options, reqData.Pager,
+				apiCollector.IsIncremental(), apiCollector.GetSince(), startedAt), nil
 		},
 		ResponseParser: func(res *http.Response) ([]json.RawMessage, errors.Error) {
 			var response struct {
@@ -131,4 +95,36 @@ func CollectWorklogs(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 
 	return apiCollector.Execute()
+}
+
+// buildWorklogQuery builds the query for one page of worklogs. Explicit
+// fromDate/toDate options win; otherwise an incremental run asks for what
+// changed since the last successful collection (updatedFrom) and a full sync
+// starts at the sync policy's timeAfter (from). Tempo rejects a period with
+// "from" but no "to" ("Non valid period ... to 'null'"), so "to" defaults to now.
+func buildWorklogQuery(opts *TempoOptions, pager *api.Pager, incremental bool, since *time.Time, now time.Time) url.Values {
+	if pager == nil {
+		pager = &api.Pager{Page: 1, Skip: 0, Size: 1000}
+	}
+	query := url.Values{}
+	query.Set("offset", strconv.Itoa(pager.Skip))
+	query.Set("limit", strconv.Itoa(pager.Size))
+
+	switch {
+	case opts.FromDate != "" || opts.ToDate != "":
+		if opts.FromDate != "" {
+			query.Set("from", opts.FromDate)
+		}
+		if opts.ToDate != "" {
+			query.Set("to", opts.ToDate)
+		}
+	case since != nil && incremental:
+		query.Set("updatedFrom", since.UTC().Format(time.RFC3339))
+	case since != nil:
+		query.Set("from", since.UTC().Format("2006-01-02"))
+	}
+	if query.Get("from") != "" && query.Get("to") == "" {
+		query.Set("to", now.UTC().Format("2006-01-02"))
+	}
+	return query
 }

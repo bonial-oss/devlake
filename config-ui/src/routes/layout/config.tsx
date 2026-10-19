@@ -21,6 +21,7 @@ import {
   ProjectOutlined,
   ExperimentOutlined,
   KeyOutlined,
+  TeamOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   ApiOutlined,
@@ -67,6 +68,11 @@ export const menuItems: MenuItem[] = [
     ],
   },
   {
+    key: `${PATH_PREFIX}/teams`,
+    label: 'Teams',
+    icon: <TeamOutlined />,
+  },
+  {
     key: `${PATH_PREFIX}/keys`,
     label: 'API Keys',
     icon: <KeyOutlined />,
@@ -110,7 +116,7 @@ export const headerItems = [
     icon: <ApiOutlined />,
   },
   {
-    link: 'https://github.com/apache/incubator-devlake',
+    link: 'https://github.com/apache/devlake',
     label: 'GitHub',
     icon: <GithubOutlined />,
   },

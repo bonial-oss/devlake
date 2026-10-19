@@ -21,13 +21,13 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/refdiff/models"
-	"github.com/apache/incubator-devlake/plugins/refdiff/utils"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/refdiff/models"
+	"github.com/apache/devlake/plugins/refdiff/utils"
 )
 
 var CalculateDeploymentCommitsDiffMeta = plugin.SubTaskMeta{
@@ -56,13 +56,15 @@ func CalculateDeploymentCommitsDiff(taskCtx plugin.SubTaskContext) errors.Error 
 		dal.From("cicd_deployment_commits dc"),
 		dal.Join("LEFT JOIN project_mapping pm ON (pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id)"),
 		dal.Join("LEFT JOIN cicd_deployment_commits p ON (dc.prev_success_deployment_commit_id = p.id)"),
+		// p.commit_sha is NULL when there is no previous successful deployment, while the
+		// finished pair is stored with an empty old_commit_sha, so compare against ''
 		dal.Where(
 			`
 			pm.project_name = ?
 			AND NOT EXISTS (
 				SELECT 1
 				FROM _tool_refdiff_finished_commits_diffs fcd
-				WHERE fcd.new_commit_sha = dc.commit_sha AND fcd.old_commit_sha = p.commit_sha
+				WHERE fcd.new_commit_sha = dc.commit_sha AND fcd.old_commit_sha = COALESCE(p.commit_sha, '')
 			)
 			`,
 			data.Options.ProjectName,

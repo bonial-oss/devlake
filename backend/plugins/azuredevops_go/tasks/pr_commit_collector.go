@@ -18,14 +18,14 @@ limitations under the License.
 package tasks
 
 import (
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
 	"reflect"
 
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
 
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/plugins/azuredevops_go/models"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/plugins/azuredevops_go/models"
 )
 
 func init() {
@@ -71,7 +71,7 @@ func CollectApiPullRequestCommits(taskCtx plugin.SubTaskContext) errors.Error {
 		PageSize:              100,
 		Input:                 iterator,
 		Incremental:           false,
-		UrlTemplate:           "{{ .Params.OrganizationId }}/{{ .Params.ProjectId }}/_apis/git/repositories/{{ .Params.RepositoryId }}/pullRequests/{{ .Input.AzuredevopsId }}/commits?api-version=7.1",
+		UrlTemplate:           "{{ if .Params.OrganizationId }}{{ .Params.OrganizationId }}/{{ end }}{{ .Params.ProjectId }}/_apis/git/repositories/{{ .Params.RepositoryId }}/pullRequests/{{ .Input.AzuredevopsId }}/commits?api-version=7.1",
 		Query:                 BuildPaginator(true),
 		ResponseParser:        ParseRawMessageFromValue,
 		GetNextPageCustomData: ExtractContToken,

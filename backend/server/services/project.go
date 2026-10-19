@@ -24,11 +24,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/models"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/crossdomain"
-	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/models"
+	"github.com/apache/devlake/core/models/domainlayer/crossdomain"
+	"github.com/apache/devlake/core/plugin"
+	helper "github.com/apache/devlake/helpers/pluginhelper/api"
 )
 
 type ProjectService interface {
@@ -103,6 +104,9 @@ func GetProjects(query *ProjectQuery) ([]*models.ApiOutputProject, int64, errors
 func CreateProject(projectInput *models.ApiInputProject) (*models.ApiOutputProject, errors.Error) {
 	// verify input
 	if err := VerifyStruct(projectInput); err != nil {
+		return nil, err
+	}
+	if err := validateProjectMetrics(projectInput.Name, projectInput.Metrics); err != nil {
 		return nil, err
 	}
 
@@ -202,6 +206,15 @@ func PatchProject(name string, body map[string]interface{}) (*models.ApiOutputPr
 		return nil, err
 	}
 
+	// allowed to changed the name
+	if projectInput.Name == "" {
+		projectInput.Name = name
+	}
+	err = validateProjectMetrics(projectInput.Name, projectInput.Metrics)
+	if err != nil {
+		return nil, err
+	}
+
 	// wrap all operation inside a transaction
 	tx := db.Begin()
 	defer func() {
@@ -218,10 +231,6 @@ func PatchProject(name string, body map[string]interface{}) (*models.ApiOutputPr
 		return nil, err
 	}
 
-	// allowed to changed the name
-	if projectInput.Name == "" {
-		projectInput.Name = name
-	}
 	project.BaseProject = projectInput.BaseProject
 
 	// name changed, updates the related entities as well
@@ -327,6 +336,9 @@ func thereAreUnfinishedPipelinesUnderProject(projectName string) (bool, errors.E
 	if err != nil {
 		return false, err
 	}
+	if blueprint == nil {
+		return false, nil
+	}
 	return thereAreUnfinishedPipelinesUnderBlueprint(blueprint.ID)
 }
 
@@ -366,10 +378,6 @@ func DeleteProject(name string) errors.Error {
 	if pipelinesAreUnfinished {
 		return errors.Default.New("There are unfinished pipelines in the current project. It cannot be deleted at this time.")
 	}
-	err = deleteProjectBlueprint(name)
-	if err != nil {
-		return err
-	}
 	tx := db.Begin()
 	defer func() {
 		if r := recover(); r != nil || err != nil {
@@ -379,6 +387,13 @@ func DeleteProject(name string) errors.Error {
 			}
 		}
 	}()
+	if err = runProjectDeleteHooks(tx, name); err != nil {
+		return err
+	}
+	err = deleteProjectBlueprint(tx, name)
+	if err != nil {
+		return err
+	}
 	err = tx.Delete(&models.Project{}, dal.Where("name = ?", name))
 	if err != nil {
 		return errors.Default.Wrap(err, "error deleting project")
@@ -399,20 +414,33 @@ func DeleteProject(name string) errors.Error {
 	if err != nil {
 		return errors.Default.Wrap(err, "error deleting project Issue metric")
 	}
-	return tx.Commit()
+	err = tx.Commit()
+	return err
 }
 
-func deleteProjectBlueprint(projectName string) errors.Error {
-	bp, err := bpManager.GetDbBlueprintByProjectName(projectName)
+func runProjectDeleteHooks(tx dal.Transaction, projectName string) errors.Error {
+	return plugin.TraversalPlugin(func(name string, pluginInst plugin.PluginMeta) errors.Error {
+		if hook, ok := pluginInst.(plugin.ProjectDeleteHook); ok {
+			if err := hook.BeforeDeleteProject(tx, projectName); err != nil {
+				return errors.Default.Wrap(err, fmt.Sprintf("error executing delete hook for plugin %s", name))
+			}
+		}
+		return nil
+	})
+}
+
+func deleteProjectBlueprint(tx dal.Transaction, projectName string) errors.Error {
+	bp := &models.Blueprint{}
+	err := tx.First(bp, dal.Where("project_name = ?", projectName))
 	if err != nil {
-		if !db.IsErrorNotFound(err) {
+		if !tx.IsErrorNotFound(err) {
 			return errors.Default.Wrap(err, fmt.Sprintf("error finding blueprint associated with project %s", projectName))
 		}
-	} else {
-		err = bpManager.DeleteBlueprint(bp.ID)
-		if err != nil {
-			return errors.Default.Wrap(err, fmt.Sprintf("error deleting blueprint associated with project %s", projectName))
-		}
+		return nil
+	}
+	err = bpManager.DeleteBlueprintInTransaction(tx, bp.ID)
+	if err != nil {
+		return errors.Default.Wrap(err, fmt.Sprintf("error deleting blueprint associated with project %s", projectName))
 	}
 	return nil
 }
@@ -427,6 +455,21 @@ func getProjectByName(tx dal.Dal, name string, additionalClauses ...dal.Clause) 
 		return nil, errors.Default.Wrap(err, "error getting project from DB")
 	}
 	return project, nil
+}
+
+// validateProjectMetrics dry-runs the plan generation of every enabled metric so that invalid
+// plugin options are rejected when the project is saved rather than when its blueprint runs.
+// The generated plans are discarded, which relies on MakeMetricPluginPipelinePlanV200 having no side effects.
+func validateProjectMetrics(projectName string, metrics []*models.BaseMetric) errors.Error {
+	for _, metric := range metrics {
+		if metric == nil || !metric.Enable {
+			continue
+		}
+		if _, err := makeMetricPluginPlan(projectName, metric.PluginName, metric.PluginOption); err != nil {
+			return errors.BadInput.Wrap(err, fmt.Sprintf("invalid options for metric plugin %s", metric.PluginName))
+		}
+	}
+	return nil
 }
 
 func refreshProjectMetrics(tx dal.Transaction, projectInput *models.ApiInputProject) errors.Error {

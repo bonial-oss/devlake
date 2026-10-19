@@ -20,12 +20,12 @@ package e2e
 import (
 	"testing"
 
-	"github.com/apache/incubator-devlake/core/models/common"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/ticket"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	"github.com/apache/incubator-devlake/plugins/jira/impl"
-	"github.com/apache/incubator-devlake/plugins/jira/models"
-	"github.com/apache/incubator-devlake/plugins/jira/tasks"
+	"github.com/apache/devlake/core/models/common"
+	"github.com/apache/devlake/core/models/domainlayer/ticket"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	"github.com/apache/devlake/plugins/jira/impl"
+	"github.com/apache/devlake/plugins/jira/models"
+	"github.com/apache/devlake/plugins/jira/tasks"
 )
 
 func TestIssueDataFlow(t *testing.T) {
@@ -281,10 +281,23 @@ func TestIssueSubtaskWithoutMapping(t *testing.T) {
 	dataflowTester.ImportCsvIntoRawTable("./raw_tables/_raw_jira_api_issues.csv", "_raw_jira_api_issues")
 	dataflowTester.ImportCsvIntoRawTable("./raw_tables/_raw_jira_api_issue_types.csv", "_raw_jira_api_issue_types")
 
+	dataflowTester.FlushTabler(&models.JiraIssue{})
+	dataflowTester.FlushTabler(&models.JiraBoardIssue{})
+	dataflowTester.FlushTabler(&models.JiraSprintIssue{})
+	dataflowTester.FlushTabler(&models.JiraIssueComment{})
+	dataflowTester.FlushTabler(&models.JiraIssueChangelogs{})
+	dataflowTester.FlushTabler(&models.JiraIssueChangelogItems{})
+	dataflowTester.FlushTabler(&models.JiraWorklog{})
+	dataflowTester.FlushTabler(&models.JiraAccount{})
+	dataflowTester.FlushTabler(&models.JiraIssueType{})
+	dataflowTester.FlushTabler(&models.JiraIssueLabel{})
+	dataflowTester.FlushTabler(&models.JiraIssueField{})
 	dataflowTester.Subtask(tasks.ExtractIssueTypesMeta, taskData)
 	dataflowTester.Subtask(tasks.ExtractIssuesMeta, taskData)
 
 	dataflowTester.FlushTabler(&ticket.Issue{})
+	dataflowTester.FlushTabler(&ticket.BoardIssue{})
+	dataflowTester.FlushTabler(&ticket.IssueAssignee{})
 
 	dataflowTester.Subtask(tasks.ConvertIssuesMeta, taskData)
 	dataflowTester.VerifyTable(

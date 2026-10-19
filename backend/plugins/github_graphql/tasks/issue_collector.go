@@ -25,15 +25,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/log"
-	"github.com/apache/incubator-devlake/core/models/common"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/core/utils"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/github/models"
-	githubTasks "github.com/apache/incubator-devlake/plugins/github/tasks"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/log"
+	"github.com/apache/devlake/core/models/common"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/core/utils"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/github/models"
+	githubTasks "github.com/apache/devlake/plugins/github/tasks"
 	"github.com/merico-ai/graphql"
 )
 
@@ -68,14 +68,14 @@ type GraphqlQueryIssue struct {
 	StateReason  string
 	Title        string
 	Body         string
-	Author       *GraphqlInlineAccountQuery
+	Author       *GraphqlInlineActorQuery
 	Url          string
 	ClosedAt     *time.Time
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	AssigneeList struct {
 		// FIXME now domain layer just support one assignee
-		Assignees []GraphqlInlineUserQuery `graphql:"nodes"`
+		Assignees []GraphqlInlineAccountQuery `graphql:"nodes"`
 	} `graphql:"assignees(first: 100)"`
 	Milestone *struct {
 		Number int

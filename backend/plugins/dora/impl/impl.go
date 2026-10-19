@@ -20,12 +20,12 @@ package impl
 import (
 	"encoding/json"
 
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	coreModels "github.com/apache/incubator-devlake/core/models"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/plugins/dora/models/migrationscripts"
-	"github.com/apache/incubator-devlake/plugins/dora/tasks"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	coreModels "github.com/apache/devlake/core/models"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/plugins/dora/models/migrationscripts"
+	"github.com/apache/devlake/plugins/dora/tasks"
 )
 
 // make sure interface is implemented
@@ -104,14 +104,19 @@ func (p Dora) PrepareTaskData(taskCtx plugin.TaskContext, options map[string]int
 	if err != nil {
 		return nil, err
 	}
+	prHeadRefRegexp, err := tasks.CompilePrHeadRefPattern(op.PrHeadRefPattern)
+	if err != nil {
+		return nil, err
+	}
 	return &tasks.DoraTaskData{
-		Options: op,
+		Options:         op,
+		PrHeadRefRegexp: prHeadRefRegexp,
 	}, nil
 }
 
 // RootPkgPath information lost when compiled as plugin(.so)
 func (p Dora) RootPkgPath() string {
-	return "github.com/apache/incubator-devlake/plugins/dora"
+	return "github.com/apache/devlake/plugins/dora"
 }
 
 func (p Dora) MigrationScripts() []plugin.MigrationScript {
@@ -125,6 +130,17 @@ func (p Dora) MakeMetricPluginPipelinePlanV200(projectName string, options json.
 		if err != nil {
 			return nil, errors.Default.WrapRaw(err)
 		}
+	}
+	// validate early so that an invalid pattern fails when the plan is generated
+	prHeadRefRegexp, err := tasks.CompilePrHeadRefPattern(op.PrHeadRefPattern)
+	if err != nil {
+		return nil, err
+	}
+	changeLeadTimeOptions := map[string]interface{}{
+		"projectName": projectName,
+	}
+	if prHeadRefRegexp != nil {
+		changeLeadTimeOptions["prHeadRefPattern"] = prHeadRefRegexp.String()
 	}
 
 	plan := coreModels.PipelinePlan{
@@ -154,10 +170,8 @@ func (p Dora) MakeMetricPluginPipelinePlanV200(projectName string, options json.
 		},
 		{
 			{
-				Plugin: "dora",
-				Options: map[string]interface{}{
-					"projectName": projectName,
-				},
+				Plugin:  "dora",
+				Options: changeLeadTimeOptions,
 				Subtasks: []string{
 					"calculateChangeLeadTime",
 					tasks.IssuesToIncidentsMeta.Name,

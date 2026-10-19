@@ -22,23 +22,23 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/apache/incubator-devlake/core/context"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/impls/logruslog"
-	"github.com/apache/incubator-devlake/server/api/apikeys"
-	"github.com/apache/incubator-devlake/server/api/auth"
-	"github.com/apache/incubator-devlake/server/api/store"
+	"github.com/apache/devlake/core/context"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/impls/logruslog"
+	"github.com/apache/devlake/server/api/apikeys"
+	"github.com/apache/devlake/server/api/auth"
+	"github.com/apache/devlake/server/api/store"
 
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/server/api/blueprints"
-	"github.com/apache/incubator-devlake/server/api/domainlayer"
-	"github.com/apache/incubator-devlake/server/api/pipelines"
-	"github.com/apache/incubator-devlake/server/api/plugininfo"
-	"github.com/apache/incubator-devlake/server/api/project"
-	"github.com/apache/incubator-devlake/server/api/push"
-	"github.com/apache/incubator-devlake/server/api/shared"
-	"github.com/apache/incubator-devlake/server/api/task"
-	"github.com/apache/incubator-devlake/server/services"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/server/api/blueprints"
+	"github.com/apache/devlake/server/api/domainlayer"
+	"github.com/apache/devlake/server/api/pipelines"
+	"github.com/apache/devlake/server/api/plugininfo"
+	"github.com/apache/devlake/server/api/project"
+	"github.com/apache/devlake/server/api/push"
+	"github.com/apache/devlake/server/api/shared"
+	"github.com/apache/devlake/server/api/task"
+	"github.com/apache/devlake/server/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -150,12 +150,12 @@ func handlePluginCall(basicRes context.BasicRes, pluginName string, handler plug
 		if err != nil {
 			if output != nil && output.Body != nil {
 				logruslog.Global.Error(err, "")
-				shared.ApiOutputSuccess(c, output.Body, err.GetType().GetHttpCode())
+				shared.ApiOutputSuccess(c, output.Body, shared.ClientHttpCode(err.GetType().GetHttpCode()))
 			} else {
 				shared.ApiOutputError(c, err)
 			}
 		} else if output != nil {
-			status := output.Status
+			status := shared.ClientHttpCode(output.Status)
 			if status < http.StatusContinue {
 				status = http.StatusOK
 			}

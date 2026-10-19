@@ -18,9 +18,9 @@ limitations under the License.
 package parser
 
 import (
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/code"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/models/domainlayer/code"
 )
 
 // commitShaSet turns a slice of repo_commits rows into a lookup set of commit SHAs.

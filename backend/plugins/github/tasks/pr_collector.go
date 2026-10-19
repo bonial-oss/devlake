@@ -26,11 +26,11 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/github/models"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	helper "github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/github/models"
 )
 
 func init() {
@@ -129,6 +129,7 @@ func CollectApiPullRequests(taskCtx plugin.SubTaskContext) errors.Error {
 					res.Body.Close()
 					return []json.RawMessage{body}, nil
 				},
+				AfterResponse: ignoreHTTPStatus404,
 			},
 		},
 	})

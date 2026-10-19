@@ -25,11 +25,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/utils"
+	"github.com/apache/devlake/core/utils"
 
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/plugin"
-	helper "github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/plugin"
+	helper "github.com/apache/devlake/helpers/pluginhelper/api"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -391,9 +391,10 @@ func (gak *GithubAppKey) CreateJwt() (string, errors.Error) {
 	token := jwt.New(jwt.SigningMethodRS256)
 	t := time.Now().Unix()
 
+	// Backdate iat and keep exp under GitHub's 10 minute limit to tolerate clock drift
 	token.Claims = jwt.MapClaims{
-		"iat": t,
-		"exp": t + (10 * 60),
+		"iat": t - 60,
+		"exp": t + (9 * 60),
 		"iss": gak.AppId,
 	}
 

@@ -18,6 +18,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CloseOutlined, PlusOutlined } from '@ant-design/icons';
 import { Flex, Space, Card, Modal, Input, Checkbox, Button } from 'antd';
 
 import API from '@/api';
@@ -30,6 +31,21 @@ import * as S from './styled';
 
 const RegexPrIssueDefaultValue = '(?mi)(Closes)[\\s]*.*(((and )?#\\d+[ ]*)+)';
 
+interface ISubProject {
+  name: string;
+  // Comma-separated in the UI; split into an array on save.
+  prLabels: string;
+  deployJobPattern: string;
+}
+
+const emptySubProject: ISubProject = { name: '', prLabels: '', deployJobPattern: '' };
+
+// Mirrors the backend's reserved names (backend/plugins/monorepo/tasks/task_data.go):
+// 'unattributed' is the sentinel written for unmatched PRs/deployments, and 'All' is the
+// label dashboards show for rows with no sub_project at all. Configuring a sub-project
+// with either name would make it indistinguishable from that sentinel in the UI.
+const RESERVED_SUB_PROJECT_NAMES = ['unattributed', 'All'];
+
 interface Props {
   project: IProject;
   onRefresh: () => void;
@@ -39,6 +55,7 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
   const [name, setName] = useState('');
   const [dora, setDora] = useState({
     enable: false,
+    prHeadRefPattern: '',
   });
   const [linker, setLinker] = useState({
     enable: false,
@@ -46,6 +63,10 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
   });
   const [issueTrace, setIssueTrace] = useState({
     enable: false,
+  });
+  const [monorepo, setMonorepo] = useState<{ enable: boolean; subProjects: ISubProject[] }>({
+    enable: false,
+    subProjects: [emptySubProject],
   });
   const [operating, setOperating] = useState(false);
   const [open, setOpen] = useState(false);
@@ -56,10 +77,12 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
     const dora = project.metrics.find((ms) => ms.pluginName === 'dora');
     const linker = project.metrics.find((ms) => ms.pluginName === 'linker');
     const issueTrace = project.metrics.find((ms) => ms.pluginName === 'issue_trace');
+    const monorepo = project.metrics.find((ms) => ms.pluginName === 'monorepo');
 
     setName(project.name);
     setDora({
       enable: dora?.enable ?? false,
+      prHeadRefPattern: dora?.pluginOption?.prHeadRefPattern ?? '',
     });
     setLinker({
       enable: linker?.enable ?? false,
@@ -68,7 +91,39 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
     setIssueTrace({
       enable: issueTrace?.enable ?? false,
     });
+    const subProjects = monorepo?.pluginOption?.subProjects;
+    setMonorepo({
+      enable: monorepo?.enable ?? false,
+      subProjects:
+        Array.isArray(subProjects) && subProjects.length
+          ? subProjects.map((sp: any) => ({
+              name: sp.name ?? '',
+              prLabels: Array.isArray(sp.prLabels) ? sp.prLabels.join(',') : '',
+              deployJobPattern: sp.deployJobPattern ?? '',
+            }))
+          : [emptySubProject],
+    });
   }, [project]);
+
+  const handleAddSubProject = () => {
+    setMonorepo({ ...monorepo, subProjects: [...monorepo.subProjects, { ...emptySubProject }] });
+  };
+
+  const handleDeleteSubProject = (index: number) => {
+    setMonorepo({ ...monorepo, subProjects: monorepo.subProjects.filter((_, i) => i !== index) });
+  };
+
+  const handleUpdateSubProject = (index: number, field: keyof ISubProject, value: string) => {
+    setMonorepo({
+      ...monorepo,
+      subProjects: monorepo.subProjects.map((sp, i) => (i === index ? { ...sp, [field]: value } : sp)),
+    });
+  };
+
+  // Blank rows are filtered out on save (see handleUpdate), so only named rows are checked.
+  const reservedSubProjectName = monorepo.enable
+    ? monorepo.subProjects.map((sp) => sp.name.trim()).find((n) => RESERVED_SUB_PROJECT_NAMES.includes(n))
+    : undefined;
 
   const handleUpdate = async () => {
     const [success] = await operator(
@@ -79,7 +134,9 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
           metrics: [
             {
               pluginName: 'dora',
-              pluginOption: {},
+              pluginOption: {
+                prHeadRefPattern: dora.prHeadRefPattern.trim(),
+              },
               enable: dora.enable,
             },
             {
@@ -93,6 +150,22 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
               pluginName: 'issue_trace',
               pluginOption: {},
               enable: issueTrace.enable,
+            },
+            {
+              pluginName: 'monorepo',
+              pluginOption: {
+                subProjects: monorepo.subProjects
+                  .filter((sp) => sp.name.trim())
+                  .map((sp) => ({
+                    name: sp.name.trim(),
+                    prLabels: sp.prLabels
+                      .split(',')
+                      .map((l) => l.trim())
+                      .filter((l) => l),
+                    deployJobPattern: sp.deployJobPattern.trim(),
+                  })),
+              },
+              enable: monorepo.enable,
             },
           ],
         }),
@@ -139,12 +212,38 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
           </Block>
           <Block
             title={
-              <Checkbox checked={dora.enable} onChange={(e) => setDora({ enable: e.target.checked })}>
+              <Checkbox checked={dora.enable} onChange={(e) => setDora({ ...dora, enable: e.target.checked })}>
                 Enable DORA Metrics
               </Checkbox>
             }
-            description="DORA metrics are four widely-adopted metrics for measuring software delivery performance."
-          />
+            description={
+              <span>
+                DORA metrics are four widely-adopted metrics for measuring software delivery performance. Optionally,
+                only count pull requests whose source branch matches this regex as changes for Lead Time for Changes and
+                the PR cycle time metrics. Leave empty to count all merged pull requests.
+                <HelpTooltip
+                  overlayInnerStyle={{ width: 500 }}
+                  content={
+                    <>
+                      <div>Example 1 - Only feature and fix branches: ^(feat|fix)/</div>
+                      <div>Example 2 - Same, case-insensitive, plus hotfix: (?i)^(feat|fix|hotfix)/</div>
+                      <div>Go RE2 syntax; lookahead such as (?!...) is not supported.</div>
+                      <div>The refs/heads/ prefix (Azure DevOps) is ignored when matching.</div>
+                    </>
+                  }
+                />
+              </span>
+            }
+          >
+            {dora.enable && (
+              <Input
+                style={{ width: 600 }}
+                placeholder="^(feat|fix)/"
+                value={dora.prHeadRefPattern}
+                onChange={(e) => setDora({ ...dora, prHeadRefPattern: e.target.value })}
+              />
+            )}
+          </Block>
           <Block
             title={
               <Checkbox checked={linker.enable} onChange={(e) => setLinker({ ...linker, enable: e.target.checked })}>
@@ -191,8 +290,64 @@ export const SettingsPanel = ({ project, onRefresh }: Props) => {
             }
             description="Parse the issue status and assignee history from issue changelogs. Currently, only Jira issues are supported."
           />
+          <Block
+            title={
+              <Checkbox
+                checked={monorepo.enable}
+                onChange={(e) => setMonorepo({ ...monorepo, enable: e.target.checked })}
+              >
+                Enable Monorepo Sub-Projects
+              </Checkbox>
+            }
+            description={
+              <span>
+                Split a single repository into several logical sub-projects for DORA-style metrics. Deployments are
+                matched by CI job name, pull requests by label. When a pull request carries more than one
+                sub-project's label, the first matching sub-project in the list below wins.
+                <HelpTooltip content="Only Deployment Frequency and Lead Time for Changes are computed. Change Failure Rate and Time to Restore Service require incident data, which sub-projects do not attribute." />
+              </span>
+            }
+          >
+            {monorepo.enable && (
+              <S.SubProjectList>
+                {monorepo.subProjects.map((sp, i) => (
+                  <div className="row" key={i}>
+                    <Input
+                      style={{ width: 180 }}
+                      placeholder="Sub-project name"
+                      value={sp.name}
+                      onChange={(e) => handleUpdateSubProject(i, 'name', e.target.value)}
+                    />
+                    <Input
+                      style={{ width: 260 }}
+                      placeholder="Labels, comma-separated, e.g. serviceA,svc-a"
+                      value={sp.prLabels}
+                      onChange={(e) => handleUpdateSubProject(i, 'prLabels', e.target.value)}
+                    />
+                    <Input
+                      style={{ width: 220 }}
+                      placeholder="Deploy job pattern, e.g. ^deploy-serviceA$"
+                      value={sp.deployJobPattern}
+                      onChange={(e) => handleUpdateSubProject(i, 'deployJobPattern', e.target.value)}
+                    />
+                    {monorepo.subProjects.length > 1 && (
+                      <Button icon={<CloseOutlined />} onClick={() => handleDeleteSubProject(i)} />
+                    )}
+                  </div>
+                ))}
+                <Button icon={<PlusOutlined />} onClick={handleAddSubProject}>
+                  Add Sub-Project
+                </Button>
+                {reservedSubProjectName && (
+                  <Message
+                    content={`"${reservedSubProjectName}" is a reserved name and cannot be used as a sub-project name.`}
+                  />
+                )}
+              </S.SubProjectList>
+            )}
+          </Block>
           <Block>
-            <Button type="primary" loading={operating} disabled={!name} onClick={handleUpdate}>
+            <Button type="primary" loading={operating} disabled={!name || !!reservedSubProjectName} onClick={handleUpdate}>
               Save
             </Button>
           </Block>

@@ -18,8 +18,15 @@ limitations under the License.
 package tasks
 
 import (
-	"github.com/apache/incubator-devlake/plugins/github/models"
+	"strings"
+
+	"github.com/apache/devlake/plugins/github/models"
 )
+
+// botLoginSuffix is how the REST API reports a bot login: `dependabot[bot]`.
+// GraphQL's `Bot.login` omits it, so it is appended back to give a bot the same
+// identity no matter which collector produced it.
+const botLoginSuffix = `[bot]`
 
 type GithubAccountEdge struct {
 	Login     string
@@ -31,47 +38,75 @@ type GithubAccountEdge struct {
 	HtmlUrl   string `graphql:"url"`
 }
 
-// GithubBotAccountEdge is the Bot-type counterpart of GithubAccountEdge; Bot has no name/company/email.
-type GithubBotAccountEdge struct {
-	Login string
-	Id    int `graphql:"databaseId"`
+// GithubBotEdge holds what a `Bot` actor exposes. The GitHub schema gives `Bot`
+// a narrower field set than `User`: no name, company or email.
+type GithubBotEdge struct {
+	Login     string
+	Id        int `graphql:"databaseId"`
+	AvatarUrl string
+	HtmlUrl   string `graphql:"url"`
 }
 
-// GraphqlInlineAccountQuery is for Actor-typed fields (author, mergedBy, review author). The Bot
-// fragment recovers login/id for GitHub App actors, which the User fragment alone returns empty.
+// GraphqlInlineAccountQuery is for fields the schema types as `User`, such as
+// assignees and commit authors.
 type GraphqlInlineAccountQuery struct {
 	GithubAccountEdge `graphql:"... on User"`
-	Bot               GithubBotAccountEdge `graphql:"... on Bot"`
 }
 
-// GraphqlInlineUserQuery is for concrete User-typed fields (assignees, commit author user), which
-// reject a Bot fragment.
-type GraphqlInlineUserQuery struct {
+// Account returns the account this query resolved to, or a zero value.
+func (q *GraphqlInlineAccountQuery) Account() GithubAccountEdge {
+	if q == nil {
+		return GithubAccountEdge{}
+	}
+	return q.GithubAccountEdge
+}
+
+// GraphqlInlineActorQuery is for fields the schema types as `Actor`, such as a
+// pull request author or the user who merged it. `Actor` is implemented by
+// `User` and `Bot` among others, so spreading only `... on User` leaves every
+// GitHub App, Dependabot or Renovate author empty.
+//
+// The two inline queries cannot be merged into one: spreading `... on Bot` on a
+// `User`-typed field makes GitHub reject the whole query with
+// "Fragment on Bot can't be spread inside User".
+type GraphqlInlineActorQuery struct {
 	GithubAccountEdge `graphql:"... on User"`
+	Bot               GithubBotEdge `graphql:"... on Bot"`
 }
 
-func appendGraphqlPreAccount(result *[]interface{}, edge *GithubAccountEdge, repoId int, connId uint64) {
-	if edge == nil || edge.Id == 0 {
+// Account returns the actor as an account, whichever type it resolved to.
+func (q *GraphqlInlineActorQuery) Account() GithubAccountEdge {
+	if q == nil {
+		return GithubAccountEdge{}
+	}
+	if q.GithubAccountEdge.Id != 0 {
+		return q.GithubAccountEdge
+	}
+	if q.Bot.Id == 0 {
+		return GithubAccountEdge{}
+	}
+	login := q.Bot.Login
+	if !strings.HasSuffix(login, botLoginSuffix) {
+		login += botLoginSuffix
+	}
+	// Name, Company and Email stay empty: that is what the REST collector stores
+	// for a bot as well.
+	return GithubAccountEdge{
+		Login:     login,
+		Id:        q.Bot.Id,
+		AvatarUrl: q.Bot.AvatarUrl,
+		HtmlUrl:   q.Bot.HtmlUrl,
+	}
+}
+
+func extractGraphqlPreAccount(result *[]interface{}, account GithubAccountEdge, repoId int, connId uint64) {
+	if account.Id == 0 {
 		return
 	}
 	*result = append(*result, &models.GithubRepoAccount{
 		ConnectionId: connId,
 		RepoGithubId: repoId,
-		Login:        edge.Login,
-		AccountId:    edge.Id,
+		Login:        account.Login,
+		AccountId:    account.Id,
 	})
-}
-
-func extractGraphqlPreAccount(result *[]interface{}, res *GraphqlInlineAccountQuery, repoId int, connId uint64) {
-	if res == nil {
-		return
-	}
-	appendGraphqlPreAccount(result, &res.GithubAccountEdge, repoId, connId)
-}
-
-func extractGraphqlPreUserAccount(result *[]interface{}, res *GraphqlInlineUserQuery, repoId int, connId uint64) {
-	if res == nil {
-		return
-	}
-	appendGraphqlPreAccount(result, &res.GithubAccountEdge, repoId, connId)
 }

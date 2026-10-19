@@ -28,12 +28,12 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/log"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
-	"github.com/apache/incubator-devlake/plugins/jira/models"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/log"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/pluginhelper/api"
+	"github.com/apache/devlake/plugins/jira/models"
 )
 
 const RAW_ISSUE_TABLE = "jira_api_issues"
@@ -118,8 +118,9 @@ func CollectIssues(taskCtx plugin.SubTaskContext) errors.Error {
 // JqlTemplateData holds the variables available inside an ExtraJQL template.
 // Users reference these with Go template syntax, e.g. `{{.BoardName}}`.
 type JqlTemplateData struct {
-	BoardId   uint64 // numeric ID of the connected Jira board
-	BoardName string // display name of the connected Jira board
+	BoardId     uint64 // numeric ID of the connected Jira board
+	BoardName   string // display name of the connected Jira board
+	ProjectName string // DevLake project name; empty string if no project context
 }
 
 // renderExtraJQL executes the ExtraJQL scope-config field as a Go text/template,
@@ -139,7 +140,8 @@ func renderExtraJQL(tmplStr string, data *JiraTaskData) (string, errors.Error) {
 	}
 
 	vars := JqlTemplateData{
-		BoardId: data.Options.BoardId,
+		BoardId:     data.Options.BoardId,
+		ProjectName: data.ProjectName,
 	}
 	if data.Board != nil {
 		vars.BoardName = data.Board.Name
@@ -231,6 +233,7 @@ func setupIssueV2Collector(apiCollector *api.StatefulApiCollector, data *JiraTas
 			query.Set("startAt", fmt.Sprintf("%v", reqData.Pager.Skip))
 			query.Set("maxResults", fmt.Sprintf("%v", reqData.Pager.Size))
 			query.Set("expand", "changelog")
+			query.Set("fields", "*all")
 			return query, nil
 		},
 		GetTotalPages: GetTotalPagesFromResponse,

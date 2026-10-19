@@ -19,6 +19,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { theme, Badge, Modal } from 'antd';
+import { WarningOutlined } from '@ant-design/icons';
 
 import { selectPlugins, selectAllConnections, selectWebhooks } from '@/features/connections';
 import { PATHS } from '@/config';
@@ -28,6 +29,16 @@ import { getPluginConfig, ConnectionList, ConnectionForm } from '@/plugins';
 import * as S from './styled';
 
 const SORT_START_WITH = ['o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
+
+// Group by the displayed name's first letter. The headings used to be produced
+// by cutting the list at the first plugin id starting with o-z, which only
+// agrees with the headings while `sort` happens to run alphabetically — it
+// stopped doing so as plugins were appended in the order they were added, so
+// Asana, Kiro, Linear and incident.io all showed up under O-Z.
+export const splitPluginsByInitial = (plugins: string[], nameOf: (plugin: string) => string) => {
+  const isOZ = (plugin: string) => SORT_START_WITH.includes((nameOf(plugin)[0] ?? '').toLowerCase());
+  return [plugins.filter((plugin) => !isOZ(plugin)), plugins.filter(isOZ)];
+};
 
 export const Connections = () => {
   const [type, setType] = useState<'list' | 'form'>();
@@ -46,18 +57,14 @@ export const Connections = () => {
   const webhooks = useAppSelector(selectWebhooks);
 
   const filterWebhookPlugins = plugins.filter((p) => p !== 'webhook');
-  const index = filterWebhookPlugins.findIndex((p) => SORT_START_WITH.includes(p[0]));
+  const deprecatedPlugin = filterWebhookPlugins
+    .map((plugin) => getPluginConfig(plugin))
+    .find((config) => config?.isDeprecated && config.deprecationMessage);
 
-  const [firstPlugins, secondPlugins] = useMemo(() => {
-    if (index > 0) {
-      // Split into A-N / O-Z at the first O-Z plugin. Must be a two-way
-      // slice — `chunk(list, index)` produces equal-size groups and the
-      // destructure keeps only the first two, silently dropping any plugins
-      // in the tail once the list exceeds 2*index.
-      return [filterWebhookPlugins.slice(0, index), filterWebhookPlugins.slice(index)];
-    }
-    return [filterWebhookPlugins, []];
-  }, [index]);
+  const [firstPlugins, secondPlugins] = useMemo(
+    () => splitPluginsByInitial(filterWebhookPlugins, (plugin) => getPluginConfig(plugin)?.name ?? plugin),
+    [filterWebhookPlugins],
+  );
 
   const handleShowListDialog = (plugin: string) => {
     setType('list');
@@ -87,6 +94,16 @@ export const Connections = () => {
       </h5>
       <h2>Data Connections</h2>
       <h5>You can create and manage data connections for the following data sources and use them in your Projects.</h5>
+      {deprecatedPlugin?.deprecationMessage && (
+        <S.DeprecationAlert
+          closable
+          showIcon
+          type="warning"
+          icon={<WarningOutlined />}
+          message="Plugin deprecation notice"
+          description={deprecatedPlugin.deprecationMessage}
+        />
+      )}
       <h4>A-N</h4>
       <ul>
         {firstPlugins.map((plugin) => {
@@ -95,6 +112,7 @@ export const Connections = () => {
           return (
             <li key={plugin} onClick={() => handleShowListDialog(plugin)}>
               {pluginConfig.isBeta && <span className="beta">Beta</span>}
+              {pluginConfig.isDeprecated && <span className="deprecated">Deprecated</span>}
               <span className="logo">{pluginConfig.icon({ color: colorPrimary })}</span>
               <span className="name">{pluginConfig.name}</span>
               <span className="count">
@@ -116,6 +134,7 @@ export const Connections = () => {
           return (
             <li key={plugin} onClick={() => handleShowListDialog(plugin)}>
               {pluginConfig.isBeta && <span className="beta">Beta</span>}
+              {pluginConfig.isDeprecated && <span className="deprecated">Deprecated</span>}
               <span className="logo">{pluginConfig.icon({ color: colorPrimary })}</span>
               <span className="name">{pluginConfig.name}</span>
               <span className="count">

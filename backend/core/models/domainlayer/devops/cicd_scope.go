@@ -20,15 +20,15 @@ package devops
 import (
 	"time"
 
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
-	plugin "github.com/apache/incubator-devlake/core/plugin"
+	"github.com/apache/devlake/core/models/domainlayer"
+	plugin "github.com/apache/devlake/core/plugin"
 )
 
 var _ plugin.Scope = (*CicdScope)(nil)
 
 type CicdScope struct {
 	domainlayer.DomainEntity
-	Name        string `gorm:"type:varchar(255)"`
+	Name        string `gorm:"type:text"`
 	Description string
 	Url         string `gorm:"type:varchar(255)"`
 	CreatedDate *time.Time

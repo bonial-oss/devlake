@@ -22,17 +22,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/models/common"
-	"github.com/apache/incubator-devlake/core/models/domainlayer"
-	"github.com/apache/incubator-devlake/core/models/domainlayer/codequality"
-	coremigrations "github.com/apache/incubator-devlake/core/models/migrationscripts"
-	"github.com/apache/incubator-devlake/core/plugin"
-	"github.com/apache/incubator-devlake/helpers/e2ehelper"
-	implcontext "github.com/apache/incubator-devlake/impls/context"
-	"github.com/apache/incubator-devlake/plugins/sonarqube/impl"
-	"github.com/apache/incubator-devlake/plugins/sonarqube/models"
-	sonarqubemigrations "github.com/apache/incubator-devlake/plugins/sonarqube/models/migrationscripts"
-	"github.com/apache/incubator-devlake/plugins/sonarqube/tasks"
+	"github.com/apache/devlake/core/models/common"
+	"github.com/apache/devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer/codequality"
+	coremigrations "github.com/apache/devlake/core/models/migrationscripts"
+	"github.com/apache/devlake/core/plugin"
+	"github.com/apache/devlake/helpers/e2ehelper"
+	implcontext "github.com/apache/devlake/impls/context"
+	"github.com/apache/devlake/plugins/sonarqube/impl"
+	"github.com/apache/devlake/plugins/sonarqube/models"
+	sonarqubemigrations "github.com/apache/devlake/plugins/sonarqube/models/migrationscripts"
+	"github.com/apache/devlake/plugins/sonarqube/tasks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,10 +80,10 @@ func TestSonarqubeIssueCodeBlockLongComponent(t *testing.T) {
 		&sonarqubeIssueCodeBlockBeforeText{},
 		&cqIssueCodeBlockBeforeText{},
 	))
-	require.NoError(t, dataflowTester.Db.Migrator().DropIndex(
+	require.NoError(t, dataflowTester.Dal.DropIndexes(
 		"cq_issue_code_blocks", "idx_cq_issue_code_blocks_component",
 	))
-	require.NoError(t, dataflowTester.Db.Migrator().DropIndex(
+	require.NoError(t, dataflowTester.Dal.DropIndexes(
 		"_tool_sonarqube_issue_code_blocks", "idx__tool_sonarqube_issue_code_blocks_component",
 	))
 

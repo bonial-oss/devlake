@@ -28,10 +28,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/incubator-devlake/core/config"
-	"github.com/apache/incubator-devlake/core/dal"
-	"github.com/apache/incubator-devlake/core/errors"
-	"github.com/apache/incubator-devlake/core/log"
+	"github.com/apache/devlake/core/config"
+	"github.com/apache/devlake/core/dal"
+	"github.com/apache/devlake/core/errors"
+	"github.com/apache/devlake/core/log"
 	tlsMysql "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
@@ -145,13 +145,13 @@ func MakeDbConnection(dbUrl string, conf *gorm.Config) (*gorm.DB, error) {
 			if err != nil {
 				return nil, err
 			}
-			gormDB, err := gorm.Open(mysql.New(mysql.Config{
+			gormDB, err := gorm.Open(wrapMysqlDialector(mysql.New(mysql.Config{
 				Conn: db,
-			}), &gorm.Config{})
+			})), &gorm.Config{})
 
 			return gormDB, err
 		}
-		return gorm.Open(mysql.Open(dbUrl), conf)
+		return gorm.Open(wrapMysqlDialector(mysql.Open(dbUrl)), conf)
 	case "postgresql", "postgres", "pg":
 		return gorm.Open(postgres.Open(dbUrl), conf)
 	default:

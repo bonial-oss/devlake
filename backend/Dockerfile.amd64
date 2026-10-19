@@ -39,7 +39,7 @@ ARG HTTPS_PROXY=
 RUN apt-get update
 RUN apt-get install -y gcc binutils libfindbin-libs-perl cmake libssh2-1-dev libssl-dev zlib1g-dev
 
-RUN go install github.com/vektra/mockery/v2@v2.53.6
+RUN go install github.com/vektra/mockery/v3@v3.8.1
 RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
 COPY --from=debian-amd64 /usr/include /rootfs-amd64/usr/include
@@ -51,7 +51,7 @@ RUN mkdir -p /tmp/build/x86_64 && cd /tmp/build/x86_64 && \
     cd libgit2-1.5.0 && \
     mkdir build && cd build && \
     cmake .. -DCMAKE_C_COMPILER=x86_64-linux-gnu-gcc \
-        -DBUILD_SHARED_LIBS=ON -DCMAKE_SYSROOT=/rootfs-amd64 \
+        -DBUILD_SHARED_LIBS=ON -DUSE_BUNDLED_ZLIB=ON -DCMAKE_SYSROOT=/rootfs-amd64 \
         -DCMAKE_INSTALL_PREFIX=/usr/local/deps/x86_64 && \
     make -j install
 
