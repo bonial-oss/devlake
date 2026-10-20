@@ -22,7 +22,6 @@ on:
       - "v*"
     branches:
       - main
-      - bonial/main
       - release-*
   workflow_dispatch:
 
