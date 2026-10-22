@@ -113,20 +113,28 @@ func pipelineServiceInit() {
 	}
 }
 
+// markInterruptedPipelineAs flags the pipelines and tasks that were still
+// running when the previous process stopped.
+//
+// A running pipeline or task has no finished_at yet, and finished_at is
+// indexed on both tables while status is not. Filtering on it keeps this
+// startup step an index lookup instead of a full scan, which matters on large
+// installs (millions of tasks) and on a cold database, where a full scan can
+// take longer than the startup probe allows.
 func markInterruptedPipelineAs(status string) {
 	errors.Must(db.UpdateColumns(
 		&models.Pipeline{},
 		[]dal.DalSet{
 			{ColumnName: "status", Value: status},
 		},
-		dal.Where("status = ?", models.TASK_RUNNING),
+		dal.Where("status = ? AND finished_at IS NULL", models.TASK_RUNNING),
 	))
 	errors.Must(db.UpdateColumns(
 		&models.Task{},
 		[]dal.DalSet{
 			{ColumnName: "status", Value: status},
 		},
-		dal.Where("status = ?", models.TASK_RUNNING),
+		dal.Where("status = ? AND finished_at IS NULL", models.TASK_RUNNING),
 	))
 }
 
@@ -607,9 +615,13 @@ func RerunPipeline(pipelineId uint64, task *models.Task) (tasks []*models.Task, 
 		rerunTasks = append(rerunTasks, rerunTask)
 	}
 
-	// mark pipeline rerun
-	err = tx.UpdateColumn(&models.Pipeline{},
-		"status", models.TASK_RERUN,
+	// mark pipeline rerun; clear finished_at so the pipeline reads as unfinished
+	// while it runs again (markInterruptedPipelineAs relies on that on startup)
+	err = tx.UpdateColumns(&models.Pipeline{},
+		[]dal.DalSet{
+			{ColumnName: "status", Value: models.TASK_RERUN},
+			{ColumnName: "finished_at", Value: nil},
+		},
 		dal.Where("id = ?", pipelineId),
 	)
 	if err != nil {
