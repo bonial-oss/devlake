@@ -17,7 +17,7 @@
 
 set -eu
 
-GO_VERSION=1.26.9
+GO_VERSION=1.27.3
 INSTALL_DIR=/opt/go/$GO_VERSION
 GO_BIN=$INSTALL_DIR/bin/go
 
@@ -54,11 +54,11 @@ fi
 case "$(uname -m)" in
     x86_64|amd64)
         archive_name=go${GO_VERSION}.linux-amd64.tar.gz
-        archive_sha256=42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d
+        archive_sha256=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
         ;;
     aarch64|arm64)
         archive_name=go${GO_VERSION}.linux-arm64.tar.gz
-        archive_sha256=4a97373d49fcacdcf3694fea368a500b00ee3e963974f3e7514132717632f052
+        archive_sha256=a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49
         ;;
     *)
         echo "unsupported architecture: $(uname -m)" >&2

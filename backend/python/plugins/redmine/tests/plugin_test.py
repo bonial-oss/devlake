@@ -1,39 +1,37 @@
-#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
 # The ASF licenses this file to You under the Apache License, Version 2.0
 # (the "License"); you may not use this file except in compliance with
 # the License.  You may obtain a copy of the License at
-#
+
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-name: Auto Cherry Pick
+import os
+import pytest
 
-on:
-  pull_request:
-    types:
-      - labeled
-      - closed
+from pydevlake.testing import assert_valid_plugin, assert_plugin_run
 
-jobs:
-  auto-cherry-pick:
-    if: false  # disabled
-    # if: github.event.pull_request.merged == true
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Auto Cherry Pick
-        uses: ./.github/actions/auto-cherry-pick
-        with:
-          author_email: action_bot@users.noreply.devlake.com
-          author_name: action_bot
+from redmine.main import RedminePlugin
+from redmine.models import Connection, ScopeConfig
+
+
+def test_valid_plugin():
+    assert_valid_plugin(RedminePlugin())
+
+
+def test_valid_plugin_and_connection():
+    endpoint = os.environ.get('REDMINE_ENDPOINT')
+    token = os.environ.get('REDMINE_TOKEN')
+    if not (endpoint and token):
+        pytest.skip("REDMINE_ENDPOINT and REDMINE_TOKEN env vars required")
+
+    connection = Connection(id=1, name='test_connection', endpoint=endpoint, token=token)
+    scope_config = ScopeConfig(id=1, name='test_config')
+    assert_plugin_run(RedminePlugin(), connection, scope_config)

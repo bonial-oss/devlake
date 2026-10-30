@@ -389,11 +389,12 @@ func batchFetchFirstReviews(projectName string, db dal.Dal, botAccountIds []stri
 // tracking began (or across a tracking gap, e.g. a repo migration) can attach to a later
 // deployment with an inflated lead time - handle those via scope/guardrails, not here.
 func batchFetchDeployments(projectName string, db dal.Dal) (map[string]*devops.CicdDeploymentCommit, errors.Error) {
-	// 1. All successful production deployments for the project, earliest first.
+	// 1. All successful production deployments for the project, earliest first. Only the
+	// columns the walk and the lead time conversion read: id, finish date and commit sha.
 	var deployments []*devops.CicdDeploymentCommit
 	err := db.All(
 		&deployments,
-		dal.Select("dc.*"),
+		dal.Select("dc.id, dc.finished_date, dc.commit_sha"),
 		dal.From("cicd_deployment_commits dc"),
 		dal.Join("LEFT JOIN project_mapping pm ON pm.table = 'cicd_scopes' AND pm.row_id = dc.cicd_scope_id"),
 		dal.Where("dc.environment = 'PRODUCTION'"), // TODO: remove this when multi-environment is supported
