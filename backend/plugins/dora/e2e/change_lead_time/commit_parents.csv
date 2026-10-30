@@ -6,3 +6,5 @@ pr_merge_commit3,commit2
 commit6,pr_merge_commit3
 pr_merge_commit4,commit7
 commit8,pr_merge_commit4
+commit18,pr_merge_commit8
+commit19,pr_merge_commit8

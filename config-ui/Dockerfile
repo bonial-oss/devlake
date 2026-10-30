@@ -31,7 +31,7 @@ COPY . .
 RUN yarn install
 RUN yarn build
 
-FROM nginxinc/nginx-unprivileged:1.31.6
+FROM nginxinc/nginx-unprivileged:1.31.7
 USER 0
 #ADD https://github.com/ufoscout/docker-compose-wait/releases/download/2.9.0/wait /wait
 #RUN chmod +x /wait
@@ -41,7 +41,12 @@ WORKDIR /usr/share/nginx/html
 RUN rm -rf ./*
 COPY --from=builder /home/node/code/dist/. ./
 EXPOSE 4000 4443
-RUN apt update && apt install -y apache2-utils iproute2
+# apt-get upgrade picks up Debian security fixes that the base tag does not contain yet
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y apache2-utils iproute2 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=builder /home/node/code/nginx.sh /usr/bin/nginx.sh
 RUN chmod +x /usr/bin/nginx.sh
 RUN chgrp -R 0 /etc/nginx /var/log/nginx /usr/share/nginx /run && \

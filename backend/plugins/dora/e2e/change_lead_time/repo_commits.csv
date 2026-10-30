@@ -21,3 +21,6 @@ repo2,pr_merge_commit3
 repo3,commit4
 repo3,commit12
 repo3,commit16
+repo1,commit18
+repo1,commit19
+repo1,pr_merge_commit8
