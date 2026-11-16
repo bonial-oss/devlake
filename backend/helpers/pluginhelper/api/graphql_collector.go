@@ -279,7 +279,7 @@ func (collector *GraphqlCollector) fetchAsync(reqData *GraphqlRequestData, handl
 			hasNonIgnorableDataErrors := false
 			for _, dataError := range dataErrors {
 				if isIgnorableGraphqlQueryError(dataError) {
-					logger.Warn(nil, "Issue may have been transferred or deleted.")
+					logger.Warn(nil, "skipping unresolvable node in graphql query: %s", dataError.Error())
 					continue
 				}
 				hasNonIgnorableDataErrors = true
@@ -348,8 +348,14 @@ func (collector *GraphqlCollector) HasError() bool {
 	return len(collector.workerErrors) > 0
 }
 
+// isIgnorableGraphqlQueryError reports whether a GraphQL data error refers to a
+// node that can no longer be resolved, for example an issue or pull request that
+// was deleted or transferred. GitHub returns these as
+// "Could not resolve to a <Type> with the <field> of <value>." for any node
+// type, so when such an error applies to a single node in a batched query that
+// node should be skipped rather than failing the whole query.
 func isIgnorableGraphqlQueryError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "Could not resolve to an Issue")
+	return err != nil && strings.Contains(err.Error(), "Could not resolve to a")
 }
 
 var _ plugin.SubTask = (*GraphqlCollector)(nil)
