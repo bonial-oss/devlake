@@ -22,11 +22,21 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/apache/devlake/core/context"
 	"github.com/apache/devlake/core/dal"
 	"github.com/apache/devlake/core/errors"
 	"github.com/apache/devlake/core/log"
+)
+
+const (
+	// batchSaveMaxRetries bounds how many extra attempts a flush makes after a
+	// transient database locking error before giving up.
+	batchSaveMaxRetries = 2
+	// batchSaveRetryBackoff is multiplied by the attempt number for a simple
+	// linear backoff between retries.
+	batchSaveRetryBackoff = 100 * time.Millisecond
 )
 
 // BatchSave performs multiple records persistence of a specific type in one sql query to improve the performance
@@ -128,7 +138,7 @@ func (c *BatchSave) flushWithoutLocking() errors.Error {
 	if c.tableName != "" {
 		clauses = append(clauses, dal.From(c.tableName))
 	}
-	err := c.db.CreateOrUpdate(c.slots.Slice(0, c.current).Interface(), clauses...)
+	err := c.createOrUpdateWithRetry(c.slots.Slice(0, c.current).Interface(), clauses)
 	if err != nil {
 		c.lastErr = err
 		return err
@@ -137,6 +147,38 @@ func (c *BatchSave) flushWithoutLocking() errors.Error {
 	c.current = 0
 	c.valueIndex = make(map[string]int)
 	return nil
+}
+
+// createOrUpdateWithRetry upserts the batch, retrying a bounded number of times
+// when the database reports a transient locking error. Concurrent tasks writing
+// overlapping rows can trip InnoDB deadlocks (MySQL error 1213) or lock-wait
+// timeouts; the batch is an idempotent upsert, so following the database's own
+// advice to "try restarting transaction" is safe and avoids failing a whole
+// subtask over a momentary lock cycle.
+func (c *BatchSave) createOrUpdateWithRetry(entity interface{}, clauses []dal.Clause) errors.Error {
+	var err errors.Error
+	for attempt := 0; ; attempt++ {
+		err = c.db.CreateOrUpdate(entity, clauses...)
+		if err == nil || attempt >= batchSaveMaxRetries || !isRetryableDBError(err) {
+			return err
+		}
+		c.log.Warn(err, "batch save on %s hit a transient lock error, retrying (%d/%d)", c.slotType.String(), attempt+1, batchSaveMaxRetries)
+		time.Sleep(batchSaveRetryBackoff * time.Duration(attempt+1))
+	}
+}
+
+// isRetryableDBError reports whether err is a transient database locking error
+// that is safe to retry: an InnoDB deadlock or lock-wait timeout on MySQL, or a
+// serialization failure or deadlock on Postgres. Detection is by message because
+// the driver error is already wrapped by the time it reaches here.
+func isRetryableDBError(err errors.Error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "deadlock") ||
+		strings.Contains(msg, "lock wait timeout") ||
+		strings.Contains(msg, "could not serialize access")
 }
 
 // Close would flush the cache and release resources
