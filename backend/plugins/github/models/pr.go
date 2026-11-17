@@ -41,23 +41,23 @@ type GithubPullRequest struct {
 	Commits        int
 	ReviewComments int
 	IsDraft        bool
+	Merged         bool
+	MergedAt       *time.Time
+	Body           string
+	Type           string `gorm:"type:varchar(255)"`
+	Component      string `gorm:"type:varchar(255)"`
+	MergeCommitSha string `gorm:"type:varchar(40)"`
+	HeadRef        string `gorm:"type:text"`
+	BaseRef        string `gorm:"type:text"`
+	BaseCommitSha  string `gorm:"type:varchar(255)"`
+	HeadCommitSha  string `gorm:"type:varchar(255)"`
+	Url            string `gorm:"type:varchar(255)"`
+	AuthorName     string `gorm:"type:text"`
+	AuthorId       int
+	MergedByName   string `gorm:"type:text"`
+	MergedById     int
 	// ReadyForReviewAt is when the pull request last left the draft state.
 	ReadyForReviewAt *time.Time
-	Merged           bool
-	MergedAt         *time.Time
-	Body             string
-	Type             string `gorm:"type:varchar(255)"`
-	Component        string `gorm:"type:varchar(255)"`
-	MergeCommitSha   string `gorm:"type:varchar(40)"`
-	HeadRef          string `gorm:"type:text"`
-	BaseRef          string `gorm:"type:text"`
-	BaseCommitSha    string `gorm:"type:varchar(255)"`
-	HeadCommitSha    string `gorm:"type:varchar(255)"`
-	Url              string `gorm:"type:varchar(255)"`
-	AuthorName       string `gorm:"type:text"`
-	AuthorId         int
-	MergedByName     string `gorm:"type:text"`
-	MergedById       int
 	common.NoPKModel
 }
 
