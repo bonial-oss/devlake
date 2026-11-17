@@ -108,7 +108,7 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 
 	// Get pull requests by repo project_name
 	var clauses = []dal.Clause{
-		dal.Select("pr.id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date, pr.head_ref"),
+		dal.Select("pr.id, pr.pull_request_key, pr.author_id, pr.author_name, pr.merge_commit_sha, pr.created_date, pr.merged_date, pr.head_ref, pr.ready_for_review_date"),
 		dal.From("pull_requests pr"),
 		dal.Join(`LEFT JOIN project_mapping pm ON (pm.row_id = pr.base_repo_id)`),
 		dal.Where("pr.merged_date IS NOT NULL AND pm.project_name = ? AND pm.table = 'repos'", data.Options.ProjectName),
@@ -144,22 +144,32 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 			projectPrMetric.Id = pr.Id
 			projectPrMetric.ProjectName = data.Options.ProjectName
 
-			// Get the first commit for the PR from batch-fetched map
+			// Get the first commit and the first review for the PR from batch-fetched maps
 			firstCommit := firstCommitsMap[pr.Id]
-			// Calculate PR coding time
+			firstReview := firstReviewsMap[pr.Id]
+			var firstReviewDate *time.Time
+			if firstReview != nil {
+				firstReviewDate = &firstReview.CreatedDate
+			}
+			// Coding ends when the PR is ready for review, which is later than its
+			// creation when it was opened as a draft.
+			codingEnd := codingEndDate(pr, firstReviewDate)
+
+			// Calculate PR coding time. The cycle time keeps measuring from the PR
+			// creation so that it does not depend on where coding ends.
+			var codingTimeToCreation *int64
 			if firstCommit != nil {
-				projectPrMetric.PrCodingTime = computeTimeSpan(&firstCommit.CommitAuthoredDate, &pr.CreatedDate)
+				projectPrMetric.PrCodingTime = computeTimeSpan(&firstCommit.CommitAuthoredDate, &codingEnd)
+				codingTimeToCreation = computeTimeSpan(&firstCommit.CommitAuthoredDate, &pr.CreatedDate)
 				projectPrMetric.FirstCommitSha = firstCommit.CommitSha
 				projectPrMetric.FirstCommitAuthoredDate = &firstCommit.CommitAuthoredDate
 			}
 			projectPrMetric.IsAuthoredByBot = matchesBotFilter(botFilteringRegex, pr.AuthorName)
 
-			// Get the first review for the PR from batch-fetched map
-			firstReview := firstReviewsMap[pr.Id]
 			// Calculate PR pickup time and PR review time
 			prDuring := computeTimeSpan(&pr.CreatedDate, pr.MergedDate)
 			if firstReview != nil {
-				projectPrMetric.PrPickupTime = computeTimeSpan(&pr.CreatedDate, &firstReview.CreatedDate)
+				projectPrMetric.PrPickupTime = computeTimeSpan(&codingEnd, &firstReview.CreatedDate)
 				projectPrMetric.PrReviewTime = computeTimeSpan(&firstReview.CreatedDate, pr.MergedDate)
 				projectPrMetric.FirstReviewId = firstReview.Id
 				projectPrMetric.FirstCommentDate = &firstReview.CreatedDate
@@ -182,8 +192,8 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 
 			// Calculate PR cycle time
 			var cycleTime int64
-			if projectPrMetric.PrCodingTime != nil {
-				cycleTime += *projectPrMetric.PrCodingTime
+			if codingTimeToCreation != nil {
+				cycleTime += *codingTimeToCreation
 			}
 			if prDuring != nil {
 				cycleTime += *prDuring
@@ -208,6 +218,23 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 		logger.Info("prHeadRefPattern %q excluded %d of %d merged pull requests", data.PrHeadRefRegexp.String(), excluded, total)
 	}
 	return nil
+}
+
+// codingEndDate returns when coding ended and the wait for a first review began.
+// That is the moment the pull request left the draft state when the source reports
+// one, otherwise its creation. A review given while the pull request was still a
+// draft ends coding at that review, so pickup time is zero rather than negative.
+func codingEndDate(pr *code.PullRequest, firstReviewDate *time.Time) time.Time {
+	if pr.ReadyForReviewDate == nil || !pr.ReadyForReviewDate.After(pr.CreatedDate) {
+		return pr.CreatedDate
+	}
+	if firstReviewDate == nil || !firstReviewDate.Before(*pr.ReadyForReviewDate) {
+		return *pr.ReadyForReviewDate
+	}
+	if firstReviewDate.Before(pr.CreatedDate) {
+		return pr.CreatedDate
+	}
+	return *firstReviewDate
 }
 
 func computeTimeSpan(start, end *time.Time) *int64 {

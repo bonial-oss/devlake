@@ -139,3 +139,40 @@ func TestCalculateCLTimeWithPrHeadRefPatternDataFlow(t *testing.T) {
 		IgnoreTypes: []interface{}{common.NoPKModel{}},
 	})
 }
+
+// pr1 leaves the draft state before its first review and pr7 after it: the draft
+// time moves from pickup to coding while the cycle time stays the same.
+func TestCalculateCLTimeDraftDataFlow(t *testing.T) {
+	var plugin impl.Dora
+	dataflowTester := e2ehelper.NewDataFlowTester(t, "dora", plugin)
+
+	t.Setenv("ENABLE_BOT_FILTERING", "true")
+	t.Setenv("BOT_FILTERING_PATTERN", ".*Renovate|Dependabot.*")
+
+	taskData := &tasks.DoraTaskData{
+		Options: &tasks.DoraOptions{
+			ProjectName: "project1",
+		},
+	}
+
+	dataflowTester.FlushTabler(&code.PullRequest{})
+
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/project_mapping.csv", &crossdomain.ProjectMapping{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/repos.csv", &code.Repo{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/cicd_scopes.csv", &devops.CicdScope{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_requests_draft.csv", &code.PullRequest{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/cicd_deployment_commits.csv", &devops.CicdDeploymentCommit{})
+	dataflowTester.ImportNullableCsvIntoTabler("./change_lead_time/commits_diffs.csv", &code.CommitsDiff{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/repo_commits.csv", &code.RepoCommit{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/commit_parents.csv", &code.CommitParent{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_comments.csv", &code.PullRequestComment{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/pull_request_commits.csv", &code.PullRequestCommit{})
+	dataflowTester.ImportCsvIntoTabler("./change_lead_time/accounts.csv", &crossdomain.Account{})
+
+	dataflowTester.FlushTabler(&crossdomain.ProjectPrMetric{})
+	dataflowTester.Subtask(tasks.CalculateChangeLeadTimeMeta, taskData)
+	dataflowTester.VerifyTableWithOptions(&crossdomain.ProjectPrMetric{}, e2ehelper.TableOptions{
+		CSVRelPath:  "./change_lead_time/project_pr_metrics_draft.csv",
+		IgnoreTypes: []interface{}{common.NoPKModel{}},
+	})
+}
