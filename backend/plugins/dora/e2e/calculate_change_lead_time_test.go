@@ -142,6 +142,7 @@ func TestCalculateCLTimeWithPrHeadRefPatternDataFlow(t *testing.T) {
 
 // pr1 leaves the draft state before its first review and pr7 after it: the draft
 // time moves from pickup to coding while the cycle time stays the same.
+// pull_requests_draft.csv mirrors pull_requests.csv plus a ready_for_review_date for pr1 and pr7.
 func TestCalculateCLTimeDraftDataFlow(t *testing.T) {
 	var plugin impl.Dora
 	dataflowTester := e2ehelper.NewDataFlowTester(t, "dora", plugin)

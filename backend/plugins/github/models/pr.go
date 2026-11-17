@@ -56,7 +56,7 @@ type GithubPullRequest struct {
 	AuthorId       int
 	MergedByName   string `gorm:"type:text"`
 	MergedById     int
-	// ReadyForReviewAt is when the pull request last left the draft state.
+	// ReadyForReviewAt is when a pull request opened as a draft was first marked ready for review.
 	ReadyForReviewAt *time.Time
 	common.NoPKModel
 }

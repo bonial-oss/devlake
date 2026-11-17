@@ -176,6 +176,8 @@ func TestCodingEndDate(t *testing.T) {
 		{"draft, reviewed after ready", ptr(at(10, 0)), ptr(at(11, 0)), at(10, 0)},
 		{"draft, no review yet", ptr(at(10, 0)), nil, at(10, 0)},
 		{"reviewed while still a draft", ptr(at(10, 0)), ptr(at(9, 30)), at(9, 30)},
+		{"ready at the creation instant", ptr(at(9, 0)), ptr(at(11, 0)), created},
+		{"reviewed at the ready instant", ptr(at(10, 0)), ptr(at(10, 0)), at(10, 0)},
 		{"review predates the pull request", ptr(at(10, 0)), ptr(at(8, 0)), created},
 		{"ready date not after creation", ptr(at(8, 0)), ptr(at(11, 0)), created},
 	}

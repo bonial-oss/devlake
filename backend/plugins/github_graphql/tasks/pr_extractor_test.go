@@ -71,3 +71,38 @@ func TestReadyForReviewSurvivesRawRoundTrip(t *testing.T) {
 		assert.True(t, readyAt.Equal(*githubPull.ReadyForReviewAt))
 	}
 }
+
+// A pull request opened ready for review and later converted to draft has a
+// ConvertToDraftEvent as its first draft transition, which unmarshals to a zero time.
+func TestConvertGithubPullRequestOpenedReadyThenConvertedToDraft(t *testing.T) {
+	pull := &GraphqlQueryPr{DatabaseId: 1, Number: 7}
+	pull.TimelineItems.Nodes = []ReadyForReviewNode{{}}
+
+	githubPull, err := convertGithubPullRequest(pull, 1, 100)
+	assert.Nil(t, err)
+	assert.Nil(t, githubPull.ReadyForReviewAt)
+}
+
+func TestConvertGithubPullRequestConvertedToDraftRawRow(t *testing.T) {
+	pull := &GraphqlQueryPr{}
+	raw := `{"DatabaseId":1,"Number":7,"TimelineItems":{"Nodes":[{"ReadyForReviewEvent":{"CreatedAt":"0001-01-01T00:00:00Z"}}]}}`
+	assert.Nil(t, json.Unmarshal([]byte(raw), pull))
+	githubPull, err := convertGithubPullRequest(pull, 1, 100)
+	assert.Nil(t, err)
+	assert.Nil(t, githubPull.ReadyForReviewAt)
+}
+
+func TestConvertGithubPullRequestUsesFirstTransition(t *testing.T) {
+	first := time.Date(2026, 3, 2, 10, 30, 0, 0, time.UTC)
+	second := time.Date(2026, 3, 5, 9, 0, 0, 0, time.UTC)
+	pull := &GraphqlQueryPr{DatabaseId: 1, Number: 7}
+	pull.TimelineItems.Nodes = []ReadyForReviewNode{{}, {}}
+	pull.TimelineItems.Nodes[0].ReadyForReviewEvent.CreatedAt = first
+	pull.TimelineItems.Nodes[1].ReadyForReviewEvent.CreatedAt = second
+
+	githubPull, err := convertGithubPullRequest(pull, 1, 100)
+	assert.Nil(t, err)
+	if assert.NotNil(t, githubPull.ReadyForReviewAt) {
+		assert.True(t, first.Equal(*githubPull.ReadyForReviewAt), "got %s", githubPull.ReadyForReviewAt)
+	}
+}

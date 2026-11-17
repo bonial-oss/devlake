@@ -60,8 +60,8 @@ type PullRequest struct {
 	Additions      int
 	Deletions      int
 	IsDraft        bool
-	// ReadyForReviewDate is when the pull request last left the draft state, or nil
-	// when it was never a draft or the source does not report it.
+	// ReadyForReviewDate is when a pull request opened as a draft was first marked ready
+	// for review, or nil when it was not opened as a draft or the source does not report it.
 	ReadyForReviewDate *time.Time
 	// SubProject is the monorepo sub-project this pull request was attributed to by the
 	// monorepo plugin, or empty/NULL when the project has no monorepo configuration.
