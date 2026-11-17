@@ -222,8 +222,9 @@ func CalculateChangeLeadTime(taskCtx plugin.SubTaskContext) errors.Error {
 
 // codingEndDate returns when coding ended and the wait for a first review began.
 // That is the moment a pull request opened as a draft was first marked ready for
-// review when the source reports one, otherwise its creation. A review given while the pull request was still a
-// draft ends coding at that review, so pickup time is zero rather than negative.
+// review when the source reports one, otherwise its creation. A review given while
+// the pull request was still a draft ends coding at that review, so pickup time is
+// zero rather than negative.
 func codingEndDate(pr *code.PullRequest, firstReviewDate *time.Time) time.Time {
 	if pr.ReadyForReviewDate == nil || !pr.ReadyForReviewDate.After(pr.CreatedDate) {
 		return pr.CreatedDate
