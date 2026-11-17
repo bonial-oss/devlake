@@ -158,5 +158,6 @@ func All() []plugin.MigrationScript {
 		new(addBlueprintIdIndexToPipelines),
 		new(expandDomainTextColumns),
 		new(addProjectPrMetricsProjectNameIndex),
+		new(addReadyForReviewDateToPr),
 	}
 }

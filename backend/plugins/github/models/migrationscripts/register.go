@@ -60,5 +60,6 @@ func All() []plugin.MigrationScript {
 		new(addPrSizeExcludedFileExtensions),
 		new(addGithubIssueFields),
 		new(expandGithubTextColumns),
+		new(addReadyForReviewAtToPr),
 	}
 }
