@@ -191,6 +191,11 @@ func convertGithubPullRequest(pull *GraphqlQueryPr, connId uint64, repoId int) (
 		githubPull.AuthorName = author.Login
 		githubPull.AuthorId = author.Id
 	}
+	if nodes := pull.TimelineItems.Nodes; len(nodes) > 0 {
+		if readyAt := nodes[len(nodes)-1].ReadyForReviewEvent.CreatedAt; !readyAt.IsZero() {
+			githubPull.ReadyForReviewAt = &readyAt
+		}
+	}
 	return githubPull, nil
 }
 

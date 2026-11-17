@@ -103,10 +103,20 @@ type GraphqlQueryPr struct {
 	ReviewRequests struct {
 		Nodes []ReviewRequestNode `graphql:"nodes"`
 	} `graphql:"reviewRequests(first: 10)"`
+	// Latest draft -> ready for review transition; empty when the PR was never a draft.
+	TimelineItems struct {
+		Nodes []ReadyForReviewNode `graphql:"nodes"`
+	} `graphql:"timelineItems(last: 1, itemTypes: [READY_FOR_REVIEW_EVENT])"`
 }
 
 type ReviewRequestNode struct {
 	RequestedReviewer RequestedReviewer `graphql:"requestedReviewer"`
+}
+
+type ReadyForReviewNode struct {
+	ReadyForReviewEvent struct {
+		CreatedAt time.Time
+	} `graphql:"... on ReadyForReviewEvent"`
 }
 
 type RequestedReviewer struct {
