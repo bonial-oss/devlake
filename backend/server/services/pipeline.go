@@ -119,21 +119,52 @@ func pipelineServiceInit() {
 	}
 }
 
+// markInterruptedPipelineAs resets pipelines and tasks that a previous, interrupted
+// process left in TASK_RUNNING to the given status. It runs during startup, before
+// the HTTP server begins serving requests.
+//
+// A transient database lock error here (a deadlock or a lock-wait timeout, which
+// happen when the database is under heavy load) must not crash the process:
+// panicking would restart the server, and the restart re-runs this same reset and
+// can contend on the same rows again, looping indefinitely (CrashLoopBackOff). So a
+// transient lock error is logged and startup continues; the rows are reset on a
+// later run once the contention clears. Non-transient errors still fail fast.
 func markInterruptedPipelineAs(status string) {
-	errors.Must(db.UpdateColumns(
-		&models.Pipeline{},
+	resetInterruptedStatus(&models.Pipeline{}, "pipelines", status)
+	resetInterruptedStatus(&models.Task{}, "tasks", status)
+}
+
+func resetInterruptedStatus(entityOrTable interface{}, label string, status string) {
+	err := db.UpdateColumns(
+		entityOrTable,
 		[]dal.DalSet{
 			{ColumnName: "status", Value: status},
 		},
 		dal.Where("status = ?", models.TASK_RUNNING),
-	))
-	errors.Must(db.UpdateColumns(
-		&models.Task{},
-		[]dal.DalSet{
-			{ColumnName: "status", Value: status},
-		},
-		dal.Where("status = ?", models.TASK_RUNNING),
-	))
+	)
+	if err == nil {
+		return
+	}
+	if isTransientLockError(err) {
+		globalPipelineLog.Error(err, "could not reset interrupted %s on startup due to database lock "+
+			"contention; continuing so the server can boot (they will be reset on a later run)", label)
+		return
+	}
+	errors.Must(err)
+}
+
+// isTransientLockError reports whether a database error is a transient lock
+// conflict (a deadlock or a lock-wait timeout) worth tolerating rather than
+// treating as fatal. It mirrors the detection BatchSave uses for its retries; the
+// two should move to a shared helper when this is contributed upstream.
+func isTransientLockError(err errors.Error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "deadlock") ||
+		strings.Contains(msg, "lock wait timeout") ||
+		strings.Contains(msg, "could not serialize access")
 }
 
 // CreatePipeline and return the model
