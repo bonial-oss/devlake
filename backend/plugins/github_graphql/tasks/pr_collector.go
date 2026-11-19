@@ -103,10 +103,22 @@ type GraphqlQueryPr struct {
 	ReviewRequests struct {
 		Nodes []ReviewRequestNode `graphql:"nodes"`
 	} `graphql:"reviewRequests(first: 10)"`
+	// First draft state transition. It is a ReadyForReviewEvent when the PR was opened as
+	// a draft; a ConvertToDraftEvent, which has no fields selected here, means the PR was
+	// opened ready for review.
+	TimelineItems struct {
+		Nodes []ReadyForReviewNode `graphql:"nodes"`
+	} `graphql:"timelineItems(first: 1, itemTypes: [READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT])"`
 }
 
 type ReviewRequestNode struct {
 	RequestedReviewer RequestedReviewer `graphql:"requestedReviewer"`
+}
+
+type ReadyForReviewNode struct {
+	ReadyForReviewEvent struct {
+		CreatedAt time.Time
+	} `graphql:"... on ReadyForReviewEvent"`
 }
 
 type RequestedReviewer struct {

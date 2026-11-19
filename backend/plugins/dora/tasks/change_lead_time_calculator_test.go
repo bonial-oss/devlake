@@ -20,8 +20,10 @@ package tasks
 import (
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/apache/devlake/core/models/domainlayer"
+	"github.com/apache/devlake/core/models/domainlayer/code"
 	"github.com/apache/devlake/core/models/domainlayer/crossdomain"
 	"github.com/apache/devlake/core/models/domainlayer/devops"
 	"github.com/stretchr/testify/assert"
@@ -153,4 +155,36 @@ func TestAttributeCommits_TipNotInGraphClaimsItself(t *testing.T) {
 func TestAttributeCommits_NoDeployments(t *testing.T) {
 	m := attributeCommitsToDeployments(nil, map[string][]string{"c2": {"c1"}})
 	assert.Empty(t, m)
+}
+
+func at(hour, minute int) time.Time {
+	return time.Date(2026, 3, 2, hour, minute, 0, 0, time.UTC)
+}
+
+func ptr(t time.Time) *time.Time { return &t }
+
+func TestCodingEndDate(t *testing.T) {
+	created := at(9, 0)
+	cases := []struct {
+		name        string
+		ready       *time.Time
+		firstReview *time.Time
+		want        time.Time
+	}{
+		{"never a draft", nil, ptr(at(11, 0)), created},
+		{"never a draft, no review", nil, nil, created},
+		{"draft, reviewed after ready", ptr(at(10, 0)), ptr(at(11, 0)), at(10, 0)},
+		{"draft, no review yet", ptr(at(10, 0)), nil, at(10, 0)},
+		{"reviewed while still a draft", ptr(at(10, 0)), ptr(at(9, 30)), at(9, 30)},
+		{"ready at the creation instant", ptr(at(9, 0)), ptr(at(11, 0)), created},
+		{"reviewed at the ready instant", ptr(at(10, 0)), ptr(at(10, 0)), at(10, 0)},
+		{"review predates the pull request", ptr(at(10, 0)), ptr(at(8, 0)), created},
+		{"ready date not after creation", ptr(at(8, 0)), ptr(at(11, 0)), created},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			pr := &code.PullRequest{CreatedDate: created, ReadyForReviewDate: c.ready}
+			assert.True(t, c.want.Equal(codingEndDate(pr, c.firstReview)), "got %v", codingEndDate(pr, c.firstReview))
+		})
+	}
 }

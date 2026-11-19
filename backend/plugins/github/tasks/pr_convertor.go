@@ -109,6 +109,7 @@ func ConvertPullRequests(taskCtx plugin.SubTaskContext) errors.Error {
 				MergedByName:   pr.MergedByName,
 				IsDraft:        pr.IsDraft,
 			}
+			domainPr.ReadyForReviewDate = pr.ReadyForReviewAt
 			// Generate account ids only for real users (#8886): a zero AuthorId (deleted
 			// user) or zero MergedById (unmerged PR) would otherwise produce an id like
 			// github:GithubAccount:1:0 that no accounts row can ever match.

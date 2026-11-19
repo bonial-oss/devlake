@@ -191,6 +191,12 @@ func convertGithubPullRequest(pull *GraphqlQueryPr, connId uint64, repoId int) (
 		githubPull.AuthorName = author.Login
 		githubPull.AuthorId = author.Id
 	}
+	// Only a PR opened as a draft has a ReadyForReviewEvent as its first draft transition.
+	if nodes := pull.TimelineItems.Nodes; len(nodes) > 0 {
+		if readyAt := nodes[0].ReadyForReviewEvent.CreatedAt; !readyAt.IsZero() {
+			githubPull.ReadyForReviewAt = &readyAt
+		}
+	}
 	return githubPull, nil
 }
 
